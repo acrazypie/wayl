@@ -222,7 +222,7 @@ def test_my_playlists_only_lists_mine(client, make_user, auth):
 
 def test_pages_render(client):
     for path in ["/", "/search", "/following", "/playlists", "/playlists/3", "/songs", "/profile",
-                 f"/song/{NUDE}", f"/artist/{RADIOHEAD}", "/user/1", "/login", "/register", "/forgot",
+                 f"/song/{NUDE}", f"/artist/{RADIOHEAD}", "/user/1", "/settings", "/friends", "/friends/3", "/login", "/register", "/forgot",
                  "/reset?token=x"]:
         res = client.get(path)
         assert res.status_code == 200, path

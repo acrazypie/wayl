@@ -5,8 +5,11 @@
 A small social music log. Search any song, log what you're playing, save songs, build playlists,
 follow friends and see what they're listening to, and check your top songs and artists.
 
-Connect your own **Plex** or **Navidrome** server and WAYL logs what you play there, imports your
-playlists, marks the songs you own, and streams your own music in the browser.
+A **self-hosted personal music log**: search any song, log what you listen to, save songs, build
+playlists and see your stats. Connect your own **Plex** or **Navidrome** server and WAYL logs what
+you play there, imports your playlists, marks the songs you own, and streams your own music in the
+browser. Share playlists with friends who run their own WAYL. (Follows and a feed between users of
+one instance are optional: `WAYL_SOCIAL=1`.)
 
 Flask + SQLite, email/password accounts, vanilla JS frontend (no build step). Song data comes from
 the free, open [MusicBrainz](https://musicbrainz.org) and [ListenBrainz](https://listenbrainz.org)
@@ -85,6 +88,32 @@ your own plays. No Plex Pass needed.
 Any other player that lets you set a custom ListenBrainz server (e.g. some Jellyfin plugins and
 mobile scrobblers) can scrobble to WAYL the same way with the token.
 
+## Sharing with friends
+
+Each WAYL can publish **read-only share links**, and any other WAYL can subscribe to them. No
+accounts across instances, no central server: a link is the permission.
+
+- **Share a playlist:** open it and turn on **Share link**, then send the link. **Share your
+  profile** (your display name, the playlists you share, and optionally your recent listens and top
+  artists) under **Settings → Sharing**. Recent listens and top artists are **off by default**;
+  when on, anyone with your profile link can see them.
+- **Subscribe:** paste a friend's link under **Friends**. You see their playlist (or profile),
+  which songs you already own on your own server, and can play those from your server or copy the
+  playlist into yours. WAYL re-checks subscribed links every `SHARE_REFRESH_HOURS` (6 by default).
+- **What crosses instances:** song metadata only (MusicBrainz ids, titles, artists, albums, cover
+  URLs, durations). Never audio, your email, your server's address, or anything from your media
+  server. The format is documented in [`docs/sharing-protocol.md`](docs/sharing-protocol.md);
+  `?format=jspf` gives a playlist as JSPF for other tools.
+- **Friends must be able to reach your `APP_URL`.** `http://localhost…` only works on your own
+  machine (Settings shows a warning). Put WAYL behind a reverse proxy with a domain, or share over
+  [Tailscale](https://tailscale.com) (`APP_URL=http://wayl.your-tailnet.ts.net:8000`).
+- **Revoking:** turn a link off, or reset it (the old link stops working right away; friends need
+  the new one).
+- `is_public` on a playlist is different: it makes the playlist visible to people signed in to
+  *your* instance. Share links work from anywhere.
+- On a public instance, set `ALLOW_PRIVATE_SERVER_URLS=0` so subscribing can't be used to make your
+  server fetch addresses on its own network.
+
 ## Run it
 
 ```bash
@@ -119,6 +148,7 @@ commit it. `python create_db.py` (or `flask --app app db upgrade`) applies it.
 | `ALLOW_PRIVATE_SERVER_URLS` | `1` (default) lets users connect servers on private/LAN addresses. Set `0` on a public instance. |
 | `HISTORY_IMPORT_DAYS` | How far back the first Plex sync imports plays (default 30). |
 | `WAYL_SOCIAL` | `1` turns on follows and a feed between users of this instance. Off by default: WAYL is a personal log first. |
+| `SHARE_REFRESH_HOURS` | How often subscribed share links are re-fetched (default 6; longer after errors). |
 | `WORKER_INTERVAL`, `PLEX_HISTORY_INTERVAL`, `PLAYLIST_SYNC_INTERVAL` | Worker timings in seconds (60 / 300 / 21600). |
 
 ### Password reset emails
@@ -168,7 +198,8 @@ and `tests/test_servers.py` uses fake Plex, plex.tv and Navidrome servers.
 ## Pages
 
 `/search`, `/following`, `/playlists` (+ `/playlists/<id>`), `/songs` (saved + recently played),
-`/profile`, `/settings` (music servers, scrobbling, account), plus `/song/<mbid>`, `/artist/<mbid>` and `/user/<id>`. Sign-in pages: `/login`,
+`/profile`, `/settings` (music servers, scrobbling, sharing, account), `/friends`
+(+ `/friends/<id>`), plus `/song/<mbid>`, `/artist/<mbid>` and `/user/<id>`. Sign-in pages: `/login`,
 `/register`, `/forgot`, `/reset`. Flask serves the same page for all of them and `app.js` picks
 the view.
 

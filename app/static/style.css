@@ -1950,3 +1950,53 @@ code {
     width: 36px;
     height: 36px;
 }
+
+/* --- sharing & friends ---------------------------------------------------------------------- */
+
+.share-controls {
+    display: contents;
+}
+
+.chip-warn {
+    height: 22px;
+    padding: 0 9px;
+    font-size: 12px;
+    font-weight: 600;
+    background: color-mix(in srgb, #e5a00d 18%, transparent);
+    color: #a46f00;
+}
+
+@media (prefers-color-scheme: dark) {
+    .chip-warn {
+        color: #f5c04a;
+    }
+}
+
+.chip-missing {
+    flex: none;
+    height: 20px;
+    padding: 0 8px;
+    font-size: 11px;
+    font-weight: 600;
+    background: transparent;
+    color: var(--muted);
+    box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.back-link {
+    margin: -8px 0 16px -12px;
+}
+
+.sub-list .person {
+    border: 1px solid var(--border);
+    background: var(--surface);
+}
+
+.sub-list .person + .person {
+    margin-top: 8px;
+}
+
+button.tile {
+    text-align: left;
+    width: auto;
+}

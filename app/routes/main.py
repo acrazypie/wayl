@@ -12,6 +12,8 @@ PAGES = [
     "/songs",
     "/profile",
     "/settings",
+    "/friends",
+    "/friends/<int:sub_id>",
     "/song/<string:song_id>",
     "/artist/<string:artist_id>",
     "/user/<int:user_id>",
