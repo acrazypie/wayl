@@ -104,6 +104,26 @@ players are configured with the base URL `<APP_URL>/listenbrainz/1/`.
 | GET | `/listenbrainz/1/validate-token` | `{code: 200, valid, user_name?}` |
 | POST | `/listenbrainz/1/submit-listens` | ListenBrainz payload; `single` and `import` are stored, `playing_now` is accepted and ignored → `{status: "ok"}` |
 
+## Sharing between instances
+
+Read-only share links any WAYL (or other client) can read. Formats and rules:
+[`sharing-protocol.md`](sharing-protocol.md). Only MusicBrainz metadata is shared, never audio.
+
+### Publishing
+
+| Method | Path | Auth | Notes |
+| --- | --- | --- | --- |
+| GET | `/share/v1/p/<token>` | – (the token) | playlist document; `?format=jspf` for JSPF. CORS `*`, `ETag`/`If-None-Match` → 304 |
+| GET | `/share/v1/u/<token>` | – (the token) | profile document |
+| GET / PUT / DELETE | `/api/playlists/<id>/share` | owner | `{shared, url, warning?}` / create the link (keeps an existing one) / remove it |
+| POST | `/api/playlists/<id>/share/reset` | owner | new link; the old one 404s |
+| GET / PATCH | `/api/me/sharing` | ✔ | `{enabled, url, share_listens, share_top_artists, display_name, warning?}`; PATCH any of `enabled, share_listens, share_top_artists, display_name` |
+| POST | `/api/me/sharing/reset` | ✔ | new profile link |
+
+`warning` appears when `APP_URL` is a localhost address friends can't open. The owner's
+`GET /api/playlists/<id>` includes `share: {shared, url}`; `GET /api/playlists` items include
+`shared`.
+
 ## Social (only when `features.social` is true)
 
 Off by default (`WAYL_SOCIAL=0`); then these paths return 404.

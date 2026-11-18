@@ -9,12 +9,14 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 import app.models.music  # noqa: F401  (register every table with SQLAlchemy / Alembic)
 import app.models.server  # noqa: F401
+import app.models.sharing  # noqa: F401
 import app.models.social  # noqa: F401  (always: keeps the follows table even with social off)
 from app.api import register_routes
 from app.api.listenbrainz import lb_bp
 from app.models import db
 from app.models.user import UserModel
 from app.routes.main import main_bp
+from app.routes.share import share_bp
 from app.routes.stream import stream_bp
 
 from .utility import config, limiter
@@ -94,6 +96,7 @@ def create_app(config_overrides=None):
     flask_app.register_blueprint(main_bp)
     flask_app.register_blueprint(stream_bp)
     flask_app.register_blueprint(lb_bp)
+    flask_app.register_blueprint(share_bp)
     return flask_app
 
 

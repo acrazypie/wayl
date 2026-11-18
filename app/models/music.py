@@ -51,10 +51,14 @@ class Song(db.Model):
 
 class Playlist(db.Model):
     __tablename__ = "playlists"
+    __table_args__ = (db.Index("ix_playlists_share_token", "share_token", unique=True),)
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    # is_public: visible to signed-in users of *this* instance.
+    # share_token: a read-only link anyone can open, from anywhere (see docs/sharing-protocol.md).
     is_public = db.Column(db.Boolean, nullable=False, default=False)
+    share_token = db.Column(db.String(32), nullable=True)  # unique: see the index above
     created_at = db.Column(db.DateTime, default=utcnow)
     songs = db.relationship(
         "PlaylistSong",

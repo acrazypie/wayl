@@ -73,6 +73,12 @@ class Me(Resource):
         ListeningHistory.query.filter_by(user_id=uid).delete(synchronize_session=False)
         SavedSong.query.filter_by(user_id=uid).delete(synchronize_session=False)
         from app.models.server import IncomingListen, ListenToken, MediaServer
+        from app.models.sharing import ShareSettings, Subscription
+
+        ShareSettings.query.filter_by(user_id=uid).delete(synchronize_session=False)
+        # children (playlists opened from a subscribed profile) before their parents
+        Subscription.query.filter(Subscription.user_id == uid, Subscription.parent_id.isnot(None)).delete(synchronize_session=False)
+        Subscription.query.filter_by(user_id=uid).delete(synchronize_session=False)
 
         IncomingListen.query.filter_by(user_id=uid).delete(synchronize_session=False)
         ListenToken.query.filter_by(user_id=uid).delete(synchronize_session=False)

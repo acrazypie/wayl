@@ -296,7 +296,7 @@ class PlaylistList(Resource):
     @auth_required
     def get(self):
         playlists = Playlist.query.filter_by(user_id=g.current_user.id).order_by(Playlist.id.desc()).all()
-        return {"items": [playlist_dict(p) for p in playlists]}
+        return {"items": [{**playlist_dict(p), "shared": p.share_token is not None} for p in playlists]}
 
     @auth_required
     def post(self):
@@ -319,6 +319,10 @@ class PlaylistDetail(Resource):
         data = playlist_dict(playlist, with_songs=True)
         data["songs"] = with_saved(user, data["songs"])
         data["is_owner"] = bool(user and user.id == playlist.user_id)
+        if data["is_owner"]:
+            from app.api.sharing import playlist_share_info
+
+            data["share"] = playlist_share_info(playlist)
         return data
 
     @auth_required

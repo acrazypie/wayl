@@ -35,6 +35,7 @@ from app.api.servers import (
     SongSources,
     UnmatchedListens,
 )
+from app.api.sharing import MySharing, MySharingReset, PlaylistShare, PlaylistShareReset
 from app.api.user import ChangePassword, Me, UserPlaylists, UserProfile
 from app.utility import social_enabled
 
@@ -94,6 +95,10 @@ def register_routes(app):
     add(PlaylistList, "/api/playlists")
     add(PlaylistDetail, "/api/playlists/<int:playlist_id>")
     add(PlaylistSongDetail, "/api/playlists/<int:playlist_id>/songs/<string:song_id>")
+    add(PlaylistShare, "/api/playlists/<int:playlist_id>/share")
+    add(PlaylistShareReset, "/api/playlists/<int:playlist_id>/share/reset")
+    add(MySharing, "/api/me/sharing")
+    add(MySharingReset, "/api/me/sharing/reset")
     add(HistoryList, "/api/history")
     add(Stats, "/api/stats")
 
