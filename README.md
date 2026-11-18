@@ -42,8 +42,8 @@ first so its health check (which the worker waits for) is kept:
 
 Open **Settings → Music servers**.
 
-**Navidrome** (or any Subsonic-compatible server): enter its address *as WAYL's server can reach
-it* (`http://navidrome:4533` if both run in the same Compose project, otherwise its LAN address),
+**Navidrome** (or any Subsonic-compatible server): enter its address _as WAYL's server can reach
+it_ (`http://navidrome:4533` if both run in the same Compose project, otherwise its LAN address),
 plus your Navidrome username and password. The password is stored encrypted and only a salted hash
 of it is ever sent to Navidrome.
 
@@ -73,7 +73,7 @@ your own plays. No Plex Pass needed.
   "Teardrop"), or by MusicBrainz id when your files are tagged with one.
 - **Search → In my library**: searches only your server's tracks (WAYL's own index, so it's
   instant). The filter stays on until you switch it off.
-- **Play** buttons on songs you own: audio streams from your server *through* WAYL, so your
+- **Play** buttons on songs you own: audio streams from your server _through_ WAYL, so your
   server's address and login never reach the browser. Plays count as a listen once half the song
   (or 4 minutes) has played. Files play as-is (no transcoding), so the browser must support the
   format: MP3, AAC/M4A, FLAC, Ogg and Opus work in current browsers; ALAC usually doesn't.
@@ -84,6 +84,32 @@ your own plays. No Plex Pass needed.
 
 Any other player that lets you set a custom ListenBrainz server (e.g. some Jellyfin plugins and
 mobile scrobblers) can scrobble to WAYL the same way with the token.
+
+## Sharing with friends
+
+Each WAYL can publish **read-only share links**, and any other WAYL can subscribe to them. No
+accounts across instances, no central server: a link is the permission.
+
+- **Share a playlist:** open it and turn on **Share link**, then send the link. **Share your
+  profile** (your display name, the playlists you share, and optionally your recent listens and top
+  artists) under **Settings → Sharing**. Recent listens and top artists are **off by default**;
+  when on, anyone with your profile link can see them.
+- **Subscribe:** paste a friend's link under **Friends**. You see their playlist (or profile),
+  which songs you already own on your own server, and can play those from your server or copy the
+  playlist into yours. WAYL re-checks subscribed links every `SHARE_REFRESH_HOURS` (6 by default).
+- **What crosses instances:** song metadata only (MusicBrainz ids, titles, artists, albums, cover
+  URLs, durations). Never audio, your email, your server's address, or anything from your media
+  server. The format is documented in [`docs/sharing-protocol.md`](docs/sharing-protocol.md);
+  `?format=jspf` gives a playlist as JSPF for other tools.
+- **Friends must be able to reach your `APP_URL`.** `http://localhost…` only works on your own
+  machine (Settings shows a warning). Put WAYL behind a reverse proxy with a domain, or share over
+  [Tailscale](https://tailscale.com) (`APP_URL=http://wayl.your-tailnet.ts.net:8000`).
+- **Revoking:** turn a link off, or reset it (the old link stops working right away; friends need
+  the new one).
+- `is_public` on a playlist is different: it makes the playlist visible to people signed in to
+  _your_ instance. Share links work from anywhere.
+- On a public instance, set `ALLOW_PRIVATE_SERVER_URLS=0` so subscribing can't be used to make your
+  server fetch addresses on its own network.
 
 ## Run it
 
@@ -107,18 +133,20 @@ commit it. `python create_db.py` (or `flask --app app db upgrade`) applies it.
 
 ### Settings (`.env`)
 
-| Variable | What it does |
-| --- | --- |
-| `SECRET_KEY` | Signs sessions, tokens and reset links. Use a long random string. |
-| `APP_URL` | Public URL of the site, used in reset emails (default `http://localhost:5000`). |
-| `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM`, `MAIL_USE_TLS` / `MAIL_USE_SSL` | SMTP for password-reset emails. |
-| `CATALOG_USER_AGENT` | Sent to MusicBrainz/ListenBrainz. Put your site's URL in it when you deploy. |
-| `RATELIMIT_STORAGE_URI` | Where rate-limit counters live (default in memory; use Redis with several workers). |
-| `SECRET_KEY_FILE` | Read the secret key from this file, creating it on first start (the Docker image uses `/data/secret_key`). |
-| `TRUST_PROXY_HOPS` | Number of reverse proxies in front of WAYL (0 = none). |
-| `ALLOW_PRIVATE_SERVER_URLS` | `1` (default) lets users connect servers on private/LAN addresses. Set `0` on a public instance. |
-| `HISTORY_IMPORT_DAYS` | How far back the first Plex sync imports plays (default 30). |
-| `WORKER_INTERVAL`, `PLEX_HISTORY_INTERVAL`, `PLAYLIST_SYNC_INTERVAL` | Worker timings in seconds (60 / 300 / 21600). |
+| Variable                                                                                                   | What it does                                                                                                  |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `SECRET_KEY`                                                                                               | Signs sessions, tokens and reset links. Use a long random string.                                             |
+| `APP_URL`                                                                                                  | Public URL of the site, used in reset emails (default `http://localhost:5000`).                               |
+| `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM`, `MAIL_USE_TLS` / `MAIL_USE_SSL` | SMTP for password-reset emails.                                                                               |
+| `CATALOG_USER_AGENT`                                                                                       | Sent to MusicBrainz/ListenBrainz. Put your site's URL in it when you deploy.                                  |
+| `RATELIMIT_STORAGE_URI`                                                                                    | Where rate-limit counters live (default in memory; use Redis with several workers).                           |
+| `SECRET_KEY_FILE`                                                                                          | Read the secret key from this file, creating it on first start (the Docker image uses `/data/secret_key`).    |
+| `TRUST_PROXY_HOPS`                                                                                         | Number of reverse proxies in front of WAYL (0 = none).                                                        |
+| `ALLOW_PRIVATE_SERVER_URLS`                                                                                | `1` (default) lets users connect servers on private/LAN addresses. Set `0` on a public instance.              |
+| `HISTORY_IMPORT_DAYS`                                                                                      | How far back the first Plex sync imports plays (default 30).                                                  |
+| `WAYL_SOCIAL`                                                                                              | `1` turns on follows and a feed between users of this instance. Off by default: WAYL is a personal log first. |
+| `SHARE_REFRESH_HOURS`                                                                                      | How often subscribed share links are re-fetched (default 6; longer after errors).                             |
+| `WORKER_INTERVAL`, `PLEX_HISTORY_INTERVAL`, `PLAYLIST_SYNC_INTERVAL`                                       | Worker timings in seconds (60 / 300 / 21600).                                                                 |
 
 ### Password reset emails
 
@@ -134,12 +162,12 @@ out everywhere else (sessions, API tokens and older reset links all stop working
 
 ## Where the music data comes from
 
-| Service | Used for | Cost / key |
-| --- | --- | --- |
-| ListenBrainz Labs recording search | Song search | Free, no key |
-| ListenBrainz metadata + popularity API | Album, year, genres, credits, cover ids, play counts, artist top tracks | Free, no key |
-| MusicBrainz web service | Artist search and details | Free for non-commercial use, no key, max 1 request/second (the app throttles itself) |
-| Cover Art Archive | Album covers | Free, images linked directly |
+| Service                                | Used for                                                                | Cost / key                                                                           |
+| -------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| ListenBrainz Labs recording search     | Song search                                                             | Free, no key                                                                         |
+| ListenBrainz metadata + popularity API | Album, year, genres, credits, cover ids, play counts, artist top tracks | Free, no key                                                                         |
+| MusicBrainz web service                | Artist search and details                                               | Free for non-commercial use, no key, max 1 request/second (the app throttles itself) |
+| Cover Art Archive                      | Album covers                                                            | Free, images linked directly                                                         |
 
 MusicBrainz core data is [CC0](https://musicbrainz.org/doc/About/Data_License) (public domain), so
 storing it in your database is fine. A song is copied into the local `songs` table the first time
@@ -179,50 +207,56 @@ JSON in, JSON out. Signed-in browsers use the session cookie; other clients sign
 Cookie-authenticated writes and all `/auth/*` POSTs must send `Content-Type: application/json`.
 Song ids are MusicBrainz recording ids (UUIDs).
 
-| Method | Path | Auth | What it does |
-| --- | --- | --- | --- |
-| POST | `/auth/register` | – | Create an account `{email, username, password}` and sign in |
-| POST | `/auth/login` | – | Sign in `{email, password, tokens?}` |
-| POST | `/auth/logout` | – | Sign out |
-| GET | `/auth/session` | – | `{"user": ...}` or `{"user": null}` |
-| POST | `/auth/forgot` | – | Email a reset link `{email}` (same answer whether or not the account exists) |
-| POST | `/auth/reset` | – | Set a new password `{token, password}` |
-| POST | `/auth/refresh` | – | New access token `{refresh_token}` |
-| GET | `/api/songs?q=` | – | Search songs (title, artist, or both) |
-| GET | `/api/songs/<mbid>` | – | Song details, credits, links, play counts |
-| GET | `/api/artists?q=` / `/api/artists/<mbid>` | – | Find artists / artist with top tracks |
-| GET | `/api/me/songs` | ✔ | Your saved songs |
-| PUT / DELETE | `/api/me/songs/<mbid>` | ✔ | Save / unsave a song |
-| GET / POST | `/api/playlists` | ✔ | List yours / create `{name, is_public?}` |
-| GET | `/api/playlists/<id>` | public playlists only | Playlist with songs |
-| POST | `/api/playlists/<id>` | owner | Add a song `{song_id}` |
-| PATCH / DELETE | `/api/playlists/<id>` | owner | Rename, toggle `is_public` / delete |
-| DELETE | `/api/playlists/<id>/songs/<mbid>` | owner | Remove a song |
-| GET / POST | `/api/history` | ✔ | Your recent listens / log one `{song_id}` |
-| GET | `/api/feed` | ✔ | Recent listens from people you follow |
-| GET | `/api/stats?days=30` | ✔ | Top songs, top artists, totals |
-| GET / PATCH / DELETE | `/api/me` | ✔ | Your account: view, edit `{username?, bio?}`, delete `{password}` |
-| POST | `/api/me/password` | ✔ | Change password `{current_password, new_password}` |
-| GET | `/api/me/following`, `/api/me/followers` | ✔ | People you follow / who follow you |
-| GET | `/api/users?q=` | ✔ | Find people by username |
-| GET | `/api/users/<id>` | – | Public profile (no email) |
-| GET | `/api/users/<id>/listens` | followers | Their recent listens (404 if you don't follow them) |
-| GET | `/api/users/<id>/playlists` | – | Their public playlists |
-| POST / DELETE | `/api/users/<id>/follow` | ✔ | Follow / unfollow |
-| GET / POST | `/api/servers` | ✔ | Your connected servers / connect one (`{kind: "navidrome", url, username, password}`, `{kind: "plex", url, token}` or `{kind: "plex", server}` after the PIN sign-in) |
-| POST, GET | `/api/servers/plex/pin`, `/api/servers/plex/pin/<id>` | ✔ | Plex sign-in: get the plex.tv URL / poll until approved (lists your servers) |
-| PATCH / DELETE | `/api/servers/<id>` | owner | Toggle `sync_listens` / `sync_playlists`, change `url` / disconnect |
-| POST | `/api/servers/<id>/sync` | owner | Sync now `{jobs?: ["library", "listens", "playlists"]}` |
-| GET | `/api/library?q=` | ✔ | Search the tracks on your servers |
-| POST | `/api/library/tracks/<id>/match` | owner | Find the MusicBrainz song for a library-only track |
-| GET | `/api/songs/<mbid>/sources` | ✔ | Where you can play a song from |
-| GET | `/api/stream/<track id>` | owner | The audio, proxied from your server (supports `Range`) |
-| GET / POST / DELETE | `/api/me/listen-token` | ✔ | Scrobble token: status / create (shown once) / revoke |
-| GET / POST / DELETE | `/api/me/unmatched` | ✔ | Listens that didn't match / retry / dismiss |
-| GET | `/listenbrainz/1/validate-token` | token | ListenBrainz-compatible |
-| POST | `/listenbrainz/1/submit-listens` | token | ListenBrainz-compatible (`single`, `import`; `playing_now` is accepted and ignored) |
-| GET | `/healthz` | – | Health check |
+| Method               | Path                                                  | Auth                  | What it does                                                                                                                                                          |
+| -------------------- | ----------------------------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST                 | `/auth/register`                                      | –                     | Create an account `{email, username, password}` and sign in                                                                                                           |
+| POST                 | `/auth/login`                                         | –                     | Sign in `{email, password, tokens?}`                                                                                                                                  |
+| POST                 | `/auth/logout`                                        | –                     | Sign out                                                                                                                                                              |
+| GET                  | `/auth/session`                                       | –                     | `{"user": ...}` or `{"user": null}`                                                                                                                                   |
+| POST                 | `/auth/forgot`                                        | –                     | Email a reset link `{email}` (same answer whether or not the account exists)                                                                                          |
+| POST                 | `/auth/reset`                                         | –                     | Set a new password `{token, password}`                                                                                                                                |
+| POST                 | `/auth/refresh`                                       | –                     | New access token `{refresh_token}`                                                                                                                                    |
+| GET                  | `/api/songs?q=`                                       | –                     | Search songs (title, artist, or both)                                                                                                                                 |
+| GET                  | `/api/songs/<mbid>`                                   | –                     | Song details, credits, links, play counts                                                                                                                             |
+| GET                  | `/api/artists?q=` / `/api/artists/<mbid>`             | –                     | Find artists / artist with top tracks                                                                                                                                 |
+| GET                  | `/api/me/songs`                                       | ✔                     | Your saved songs                                                                                                                                                      |
+| PUT / DELETE         | `/api/me/songs/<mbid>`                                | ✔                     | Save / unsave a song                                                                                                                                                  |
+| GET / POST           | `/api/playlists`                                      | ✔                     | List yours / create `{name, is_public?}`                                                                                                                              |
+| GET                  | `/api/playlists/<id>`                                 | public playlists only | Playlist with songs                                                                                                                                                   |
+| POST                 | `/api/playlists/<id>`                                 | owner                 | Add a song `{song_id}`                                                                                                                                                |
+| PATCH / DELETE       | `/api/playlists/<id>`                                 | owner                 | Rename, toggle `is_public` / delete                                                                                                                                   |
+| DELETE               | `/api/playlists/<id>/songs/<mbid>`                    | owner                 | Remove a song                                                                                                                                                         |
+| GET / POST           | `/api/history`                                        | ✔                     | Your recent listens / log one `{song_id}`                                                                                                                             |
+| GET                  | `/api/feed`                                           | ✔                     | Recent listens from people you follow (social only)                                                                                                                   |
+| GET                  | `/api/stats?days=30`                                  | ✔                     | Top songs, top artists, totals                                                                                                                                        |
+| GET / PATCH / DELETE | `/api/me`                                             | ✔                     | Your account: view, edit `{username?, bio?}`, delete `{password}`                                                                                                     |
+| POST                 | `/api/me/password`                                    | ✔                     | Change password `{current_password, new_password}`                                                                                                                    |
+| GET                  | `/api/me/following`, `/api/me/followers`              | ✔                     | People you follow / who follow you (social only)                                                                                                                      |
+| GET                  | `/api/users?q=`                                       | ✔                     | Find people by username (social only)                                                                                                                                 |
+| GET                  | `/api/users/<id>`                                     | –                     | Public profile (no email)                                                                                                                                             |
+| GET                  | `/api/users/<id>/listens`                             | followers             | Their recent listens (404 if you don't follow them) (social only)                                                                                                     |
+| GET                  | `/api/users/<id>/playlists`                           | –                     | Their public playlists                                                                                                                                                |
+| POST / DELETE        | `/api/users/<id>/follow`                              | ✔                     | Follow / unfollow (social only)                                                                                                                                       |
+| GET / POST           | `/api/servers`                                        | ✔                     | Your connected servers / connect one (`{kind: "navidrome", url, username, password}`, `{kind: "plex", url, token}` or `{kind: "plex", server}` after the PIN sign-in) |
+| POST, GET            | `/api/servers/plex/pin`, `/api/servers/plex/pin/<id>` | ✔                     | Plex sign-in: get the plex.tv URL / poll until approved (lists your servers)                                                                                          |
+| PATCH / DELETE       | `/api/servers/<id>`                                   | owner                 | Toggle `sync_listens` / `sync_playlists`, change `url` / disconnect                                                                                                   |
+| POST                 | `/api/servers/<id>/sync`                              | owner                 | Sync now `{jobs?: ["library", "listens", "playlists"]}`                                                                                                               |
+| GET                  | `/api/library?q=`                                     | ✔                     | Search the tracks on your servers                                                                                                                                     |
+| POST                 | `/api/library/tracks/<id>/match`                      | owner                 | Find the MusicBrainz song for a library-only track                                                                                                                    |
+| GET                  | `/api/songs/<mbid>/sources`                           | ✔                     | Where you can play a song from                                                                                                                                        |
+| GET                  | `/api/stream/<track id>`                              | owner                 | The audio, proxied from your server (supports `Range`)                                                                                                                |
+| GET / POST / DELETE  | `/api/me/listen-token`                                | ✔                     | Scrobble token: status / create (shown once) / revoke                                                                                                                 |
+| GET / POST / DELETE  | `/api/me/unmatched`                                   | ✔                     | Listens that didn't match / retry / dismiss                                                                                                                           |
+| GET                  | `/listenbrainz/1/validate-token`                      | token                 | ListenBrainz-compatible                                                                                                                                               |
+| POST                 | `/listenbrainz/1/submit-listens`                      | token                 | ListenBrainz-compatible (`single`, `import`; `playing_now` is accepted and ignored)                                                                                   |
+| GET                  | `/healthz`                                            | –                     | Health check                                                                                                                                                          |
 
 When you have a server connected, song objects also carry `"owned": true/false`.
 
 Sign-in, registration and password reset are rate limited per IP.
+
+## License
+
+The code is licensed under the [GNU General Public License v3.0](LICENSE).
+
+The wayl name and logos (`app/static/favicon.svg`, `app/static/logo-wordmark.svg`, `app/static/logo.svg`) are not covered by the GPL. Please don't use them for forks or other projects without permission.
