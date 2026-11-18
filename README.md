@@ -118,6 +118,7 @@ commit it. `python create_db.py` (or `flask --app app db upgrade`) applies it.
 | `TRUST_PROXY_HOPS` | Number of reverse proxies in front of WAYL (0 = none). |
 | `ALLOW_PRIVATE_SERVER_URLS` | `1` (default) lets users connect servers on private/LAN addresses. Set `0` on a public instance. |
 | `HISTORY_IMPORT_DAYS` | How far back the first Plex sync imports plays (default 30). |
+| `WAYL_SOCIAL` | `1` turns on follows and a feed between users of this instance. Off by default: WAYL is a personal log first. |
 | `WORKER_INTERVAL`, `PLEX_HISTORY_INTERVAL`, `PLAYLIST_SYNC_INTERVAL` | Worker timings in seconds (60 / 300 / 21600). |
 
 ### Password reset emails
@@ -173,6 +174,9 @@ the view.
 
 ## API
 
+The full reference, including the stable `/api/v1` paths for other clients, is in
+[`docs/api.md`](docs/api.md). Summary:
+
 JSON in, JSON out. Signed-in browsers use the session cookie; other clients sign in with
 `POST /auth/login {"email", "password", "tokens": true}` to get an access token (send it as
 `Authorization: Bearer <access_token>`) and a refresh token (renew with `POST /auth/refresh`).
@@ -199,16 +203,16 @@ Song ids are MusicBrainz recording ids (UUIDs).
 | PATCH / DELETE | `/api/playlists/<id>` | owner | Rename, toggle `is_public` / delete |
 | DELETE | `/api/playlists/<id>/songs/<mbid>` | owner | Remove a song |
 | GET / POST | `/api/history` | ✔ | Your recent listens / log one `{song_id}` |
-| GET | `/api/feed` | ✔ | Recent listens from people you follow |
+| GET | `/api/feed` | ✔ | Recent listens from people you follow (social only) |
 | GET | `/api/stats?days=30` | ✔ | Top songs, top artists, totals |
 | GET / PATCH / DELETE | `/api/me` | ✔ | Your account: view, edit `{username?, bio?}`, delete `{password}` |
 | POST | `/api/me/password` | ✔ | Change password `{current_password, new_password}` |
-| GET | `/api/me/following`, `/api/me/followers` | ✔ | People you follow / who follow you |
-| GET | `/api/users?q=` | ✔ | Find people by username |
+| GET | `/api/me/following`, `/api/me/followers` | ✔ | People you follow / who follow you (social only) |
+| GET | `/api/users?q=` | ✔ | Find people by username (social only) |
 | GET | `/api/users/<id>` | – | Public profile (no email) |
-| GET | `/api/users/<id>/listens` | followers | Their recent listens (404 if you don't follow them) |
+| GET | `/api/users/<id>/listens` | followers | Their recent listens (404 if you don't follow them) (social only) |
 | GET | `/api/users/<id>/playlists` | – | Their public playlists |
-| POST / DELETE | `/api/users/<id>/follow` | ✔ | Follow / unfollow |
+| POST / DELETE | `/api/users/<id>/follow` | ✔ | Follow / unfollow (social only) |
 | GET / POST | `/api/servers` | ✔ | Your connected servers / connect one (`{kind: "navidrome", url, username, password}`, `{kind: "plex", url, token}` or `{kind: "plex", server}` after the PIN sign-in) |
 | POST, GET | `/api/servers/plex/pin`, `/api/servers/plex/pin/<id>` | ✔ | Plex sign-in: get the plex.tv URL / poll until approved (lists your servers) |
 | PATCH / DELETE | `/api/servers/<id>` | owner | Toggle `sync_listens` / `sync_playlists`, change `url` / disconnect |

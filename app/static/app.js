@@ -101,7 +101,7 @@
 
     // --- state & API ------------------------------------------------------------------
 
-    const state = { me: null, playlists: null };
+    const state = { me: null, playlists: null, instance: null };
 
     /** Per-browser preferences (e.g. the search filter). Storage can be unavailable: ignore. */
     const prefs = {
@@ -730,13 +730,18 @@
 
     // --- router --------------------------------------------------------------------------------
 
+    /** Social features (follows, feed) are optional per instance: see /api/instance. */
+    const social = () => !!(state.instance && state.instance.features && state.instance.features.social);
+
+    // [path, label, icon, needs social]
     const NAV = [
         ["/search", "Search", "search"],
-        ["/following", "Following", "users"],
+        ["/following", "Following", "users", true],
         ["/playlists", "Playlists", "playlist"],
         ["/songs", "My songs", "music"],
         ["/profile", "Profile", "user"],
     ];
+    const navItems = () => NAV.filter((item) => !item[3] || social());
 
     const routes = [
         [/^\/$/, () => go(state.me ? "/search" : "/login", true)],
@@ -745,7 +750,7 @@
         [/^\/forgot$/, pageForgot, "guest"],
         [/^\/reset$/, pageReset, "any"],
         [/^\/search$/, pageSearch],
-        [/^\/following$/, pageFollowing],
+        [/^\/following$/, pageFollowing, undefined, "social"],
         [/^\/playlists$/, pagePlaylists],
         [/^\/playlists\/(\d+)$/, pagePlaylist],
         [/^\/songs$/, pageMySongs],
@@ -775,8 +780,8 @@
 
     function buildNav() {
         const link = ([href, label, ic]) => h("a", { href }, icon(ic), h("span", {}, label));
-        clear($("#nav"), NAV.map(link), h("hr", { class: "nav-sep" }), link(["/settings", "Settings", "sliders"]));
-        clear($("#tabbar"), NAV.map(link));
+        clear($("#nav"), navItems().map(link), h("hr", { class: "nav-sep" }), link(["/settings", "Settings", "sliders"]));
+        clear($("#tabbar"), navItems().map(link));
         clear($("#mobile-actions"), h("a", { href: "/settings", class: "icon-btn", "aria-label": "Settings" }, icon("sliders")));
     }
 
@@ -792,7 +797,8 @@
     function render() {
         const path = location.pathname;
         const params = new URLSearchParams(location.search);
-        const match = routes.find(([re]) => re.test(path));
+        // routes marked "social" only exist when the instance has social features on
+        const match = routes.find(([re, , , needs]) => re.test(path) && (needs !== "social" || social()));
         if (!match) {
             appEl.dataset.state = "user";
             clear(main, empty("disc", "Page not found", "That page doesn't exist.", h("a", { class: "btn", href: "/search" }, "Go to search")));
@@ -840,7 +846,13 @@
                     "section",
                     { class: "auth-art", "aria-hidden": "true" },
                     h("h2", {}, "What are you listening to?"),
-                    h("p", {}, "Log the songs you love, build playlists, and see what your friends are playing right now.")
+                    h(
+                        "p",
+                        {},
+                        social()
+                            ? "Log the songs you love, build playlists, and see what your friends are playing right now."
+                            : "Your own music log: track what you listen to, build playlists, and stream your library from your own server."
+                    )
                 ),
                 h(
                     "section",
@@ -1674,8 +1686,9 @@
                 h(
                     "div",
                     { class: "counts" },
-                    h("span", {}, h("b", {}, user.followers), " followers"),
-                    h("span", {}, h("b", {}, user.following), " following"),
+                    // follower counts only exist when social features are on
+                    user.followers !== undefined && h("span", {}, h("b", { class: "followers-count" }, user.followers), " followers"),
+                    user.following !== undefined && h("span", {}, h("b", {}, user.following), " following"),
                     user.joined_at && h("span", {}, `Joined ${monthYear(user.joined_at)}`)
                 ),
                 extra
@@ -1814,7 +1827,7 @@
     async function deleteAccount() {
         const password = await confirmDialog({
             title: "Delete your account?",
-            text: "Everything will be deleted: listens, saved songs, playlists and followers. Enter your password to confirm.",
+            text: `Everything will be deleted: listens, saved songs, playlists${social() ? ", followers" : ""} and server connections. Enter your password to confirm.`,
             confirm: "Delete forever",
             danger: true,
             password: true,
@@ -2205,7 +2218,7 @@
 
         const listens = h("div", {});
         const playlists = h("div", {});
-        const followersCount = () => main.querySelector(".counts b");
+        const followersCount = () => main.querySelector(".followers-count");
 
         async function loadListens() {
             if (!user.listens_visible) {
@@ -2227,7 +2240,7 @@
             }
         }
 
-        const follow = followButton(
+        const follow = social() && followButton(
             user,
             (u) => {
                 user.followers += u.is_following ? 1 : -1;
@@ -2240,11 +2253,11 @@
 
         clear(
             main,
-            profileHero(user, { extra: h("div", { class: "actions" }, follow) }),
-            h("div", { class: "section" }, h("h2", { class: "section-title" }, "Recent listens"), listens),
+            profileHero(user, { extra: follow && h("div", { class: "actions" }, follow) }),
+            social() && h("div", { class: "section" }, h("h2", { class: "section-title" }, "Recent listens"), listens),
             h("div", { class: "section" }, h("h2", { class: "section-title" }, "Public playlists"), playlists)
         );
-        loadListens();
+        if (social()) loadListens();
 
         try {
             const items = (await api(`/api/users/${id}/playlists`)).items;
@@ -2263,13 +2276,14 @@
             window.close();
             return;
         }
-        buildNav();
         buildPlayer();
-        try {
-            state.me = (await api("/auth/session")).user;
-        } catch {
-            state.me = null;
-        }
+        const [session, instance] = await Promise.all([
+            api("/auth/session").catch(() => ({ user: null })),
+            api("/api/instance").catch(() => null),
+        ]);
+        state.me = session.user;
+        state.instance = instance || { features: { social: false, sharing: true, streaming: true } };
+        buildNav();
         render();
     }
 

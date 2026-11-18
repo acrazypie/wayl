@@ -14,7 +14,6 @@ from app.models.music import (
     SavedSong,
     Song,
 )
-from app.models.user import Follow
 from app.services import catalog
 from app.utility import auth_required, get_current_user, int_arg, iso, json_body
 
@@ -441,22 +440,6 @@ class HistoryList(Resource):
             db.session.commit()
             return None, ({"error": "This track isn't in MusicBrainz, so it can't be logged"}, 404)
         return song, None
-
-
-class FeedList(Resource):
-    """What the people you follow have been listening to."""
-
-    @auth_required
-    def get(self):
-        limit = int_arg("limit", 30, 1, 100)
-        followed = db.session.query(Follow.followed_id).filter(Follow.follower_id == g.current_user.id)
-        entries = (
-            ListeningHistory.query.filter(ListeningHistory.user_id.in_(followed))
-            .order_by(desc(ListeningHistory.listened_at), desc(ListeningHistory.id))
-            .limit(limit)
-            .all()
-        )
-        return {"items": listens_for(g.current_user, entries, with_user=True)}
 
 
 class Stats(Resource):

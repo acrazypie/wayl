@@ -19,6 +19,7 @@ CHUNK = 64 * 1024
 
 
 @stream_bp.get("/api/stream/<int:track_id>")
+@stream_bp.get("/api/v1/stream/<int:track_id>")
 def stream(track_id):
     user, _ = get_current_user()
     st = db.session.get(ServerTrack, track_id)

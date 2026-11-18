@@ -8,7 +8,7 @@ os.environ["APP_URL"] = "https://wayl.test"
 import pytest
 from flask import g
 
-from app import app as flask_app
+from app import create_app
 from app.models import db
 from app.models.user import UserModel
 from app.services import catalog
@@ -17,9 +17,14 @@ from app.utility import create_jwt, limiter, mail
 
 # The fixtures keep one app context open, so Flask's `g` (where Flask-Login caches the current
 # user) would otherwise leak from one test request into the next. Real requests get a fresh one.
-@flask_app.before_request
 def _forget_cached_user():
     g.pop("_login_user", None)
+
+
+def build_app(social=False):
+    flask_app = create_app({"TESTING": True, "SOCIAL_ENABLED": social, "SQLALCHEMY_DATABASE_URI": "sqlite://"})
+    flask_app.before_request(_forget_cached_user)
+    return flask_app
 
 PASSWORD = "correct horse battery"
 
@@ -108,8 +113,10 @@ def fake_catalog(monkeypatch):
 
 
 @pytest.fixture()
-def app():
-    flask_app.config.update(TESTING=True)
+def app(request):
+    """A fresh app per test. Social features are off (the default) unless the test is marked
+    @pytest.mark.social."""
+    flask_app = build_app(social=request.node.get_closest_marker("social") is not None)
     mail.outbox.clear()
     limiter.reset()
     with flask_app.app_context():

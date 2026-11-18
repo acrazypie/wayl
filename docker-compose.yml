@@ -11,6 +11,8 @@ x-wayl-env: &wayl-env
   # Set to 0 on a public instance so users can't make WAYL connect to your private network.
   ALLOW_PRIVATE_SERVER_URLS: ${ALLOW_PRIVATE_SERVER_URLS:-1}
   HISTORY_IMPORT_DAYS: ${HISTORY_IMPORT_DAYS:-30}
+  # Follows + feed between users of this instance (off: WAYL is a personal log).
+  WAYL_SOCIAL: ${WAYL_SOCIAL:-0}
   CATALOG_USER_AGENT: ${CATALOG_USER_AGENT:-WAYL/1.0 (self-hosted music log)}
   MAIL_SERVER: ${MAIL_SERVER:-}
   MAIL_PORT: ${MAIL_PORT:-587}

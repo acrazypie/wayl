@@ -9,10 +9,10 @@ from app.api.auth import (
     ResetPassword,
     SessionInfo,
 )
+from app.api.instance import InstanceInfo
 from app.api.music import (
     ArtistDetail,
     ArtistSearch,
-    FeedList,
     HistoryList,
     PlaylistDetail,
     PlaylistList,
@@ -35,66 +35,74 @@ from app.api.servers import (
     SongSources,
     UnmatchedListens,
 )
-from app.api.user import (
-    ChangePassword,
-    FollowList,
-    FollowUser,
-    Me,
-    UserListens,
-    UserPlaylists,
-    UserProfile,
-    UserSearch,
-)
+from app.api.user import ChangePassword, Me, UserPlaylists, UserProfile
+from app.utility import social_enabled
 
-api = Api()
+API_V1 = "/api/v1"
+
+
+def versioned(path):
+    """The stable /api/v1 twin of a route: /api/x -> /api/v1/x, /auth/x -> /api/v1/auth/x."""
+    if path.startswith("/api/"):
+        return API_V1 + path[len("/api"):]
+    return API_V1 + path
 
 
 def register_routes(app):
+    """Add every REST resource to `app`. Each one is served at its usual path (what the web app
+    uses) and under /api/v1 (what other clients should use)."""
+    api = Api()  # one per app, so create_app() can be called more than once (tests)
+
+    def add(resource, path, **kwargs):
+        api.add_resource(resource, path, versioned(path), **kwargs)
+
     # Resources must be added BEFORE init_app, otherwise Flask-RESTful never registers them.
-    api.add_resource(SessionInfo, "/auth/session")
-    api.add_resource(Register, "/auth/register")
-    api.add_resource(Login, "/auth/login")
-    api.add_resource(Logout, "/auth/logout")
-    api.add_resource(ForgotPassword, "/auth/forgot")
-    api.add_resource(ResetPassword, "/auth/reset")
-    api.add_resource(RefreshToken, "/auth/refresh")
+    add(InstanceInfo, "/api/instance")
 
-    api.add_resource(Me, "/api/me")
-    api.add_resource(ChangePassword, "/api/me/password")
-    api.add_resource(SavedSongList, "/api/me/songs")
-    api.add_resource(SavedSongDetail, "/api/me/songs/<string:song_id>")
-    api.add_resource(FollowList, "/api/me/following", endpoint="my_following",
-                     resource_class_args=("following",))
-    api.add_resource(FollowList, "/api/me/followers", endpoint="my_followers",
-                     resource_class_args=("followers",))
+    add(SessionInfo, "/auth/session")
+    add(Register, "/auth/register")
+    add(Login, "/auth/login")
+    add(Logout, "/auth/logout")
+    add(ForgotPassword, "/auth/forgot")
+    add(ResetPassword, "/auth/reset")
+    add(RefreshToken, "/auth/refresh")
 
-    api.add_resource(UserSearch, "/api/users")
-    api.add_resource(UserProfile, "/api/users/<int:user_id>")
-    api.add_resource(UserListens, "/api/users/<int:user_id>/listens")
-    api.add_resource(UserPlaylists, "/api/users/<int:user_id>/playlists")
-    api.add_resource(FollowUser, "/api/users/<int:user_id>/follow")
+    add(Me, "/api/me")
+    add(ChangePassword, "/api/me/password")
+    add(SavedSongList, "/api/me/songs")
+    add(SavedSongDetail, "/api/me/songs/<string:song_id>")
+    add(ListenTokenResource, "/api/me/listen-token")
+    add(UnmatchedListens, "/api/me/unmatched")
 
-    api.add_resource(SongSearch, "/api/songs")
-    api.add_resource(SongDetail, "/api/songs/<string:song_id>")
-    api.add_resource(ArtistSearch, "/api/artists")
-    api.add_resource(ArtistDetail, "/api/artists/<string:artist_id>")
+    add(UserProfile, "/api/users/<int:user_id>")
+    add(UserPlaylists, "/api/users/<int:user_id>/playlists")
 
-    api.add_resource(ServerList, "/api/servers")
-    api.add_resource(PlexPin, "/api/servers/plex/pin")
-    api.add_resource(PlexPinCheck, "/api/servers/plex/pin/<int:pin_id>")
-    api.add_resource(ServerDetail, "/api/servers/<int:server_id>")
-    api.add_resource(ServerSync, "/api/servers/<int:server_id>/sync")
-    api.add_resource(LibrarySearch, "/api/library")
-    api.add_resource(LibraryTrackMatch, "/api/library/tracks/<int:track_id>/match")
-    api.add_resource(SongSources, "/api/songs/<string:song_id>/sources")
-    api.add_resource(ListenTokenResource, "/api/me/listen-token")
-    api.add_resource(UnmatchedListens, "/api/me/unmatched")
+    add(SongSearch, "/api/songs")
+    add(SongDetail, "/api/songs/<string:song_id>")
+    add(SongSources, "/api/songs/<string:song_id>/sources")
+    add(ArtistSearch, "/api/artists")
+    add(ArtistDetail, "/api/artists/<string:artist_id>")
 
-    api.add_resource(PlaylistList, "/api/playlists")
-    api.add_resource(PlaylistDetail, "/api/playlists/<int:playlist_id>")
-    api.add_resource(PlaylistSongDetail, "/api/playlists/<int:playlist_id>/songs/<string:song_id>")
-    api.add_resource(HistoryList, "/api/history")
-    api.add_resource(FeedList, "/api/feed")
-    api.add_resource(Stats, "/api/stats")
+    add(ServerList, "/api/servers")
+    add(PlexPin, "/api/servers/plex/pin")
+    add(PlexPinCheck, "/api/servers/plex/pin/<int:pin_id>")
+    add(ServerDetail, "/api/servers/<int:server_id>")
+    add(ServerSync, "/api/servers/<int:server_id>/sync")
+    add(LibrarySearch, "/api/library")
+    add(LibraryTrackMatch, "/api/library/tracks/<int:track_id>/match")
+
+    add(PlaylistList, "/api/playlists")
+    add(PlaylistDetail, "/api/playlists/<int:playlist_id>")
+    add(PlaylistSongDetail, "/api/playlists/<int:playlist_id>/songs/<string:song_id>")
+    add(HistoryList, "/api/history")
+    add(Stats, "/api/stats")
+
+    with app.app_context():
+        social = social_enabled()
+    if social:
+        from app.api.social import register_social_routes
+
+        register_social_routes(add)
 
     api.init_app(app)
+    return api

@@ -33,12 +33,3 @@ class UserModel(UserMixin, db.Model):
     def check_password(self, password) -> bool:
         return bool(self.password_hash) and check_password_hash(self.password_hash, password)
 
-
-class Follow(db.Model):
-    __tablename__ = "follows"
-    __table_args__ = (db.UniqueConstraint("follower_id", "followed_id"),)
-
-    id = db.Column(db.Integer, primary_key=True)
-    follower_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
-    followed_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
-    created_at = db.Column(db.DateTime, default=utcnow)
