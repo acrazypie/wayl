@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 204 64" width="204" height="64" role="img" aria-labelledby="wayl-t2">
+  <title id="wayl-t2">WAYL</title>
+  <defs>
+    <linearGradient id="wayl-g2" x1="4" y1="6" x2="60" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7c5cff"/>
+      <stop offset="1" stop-color="#ff5c8a"/>
+    </linearGradient>
+    <linearGradient id="wayl-g3" x1="74" y1="0" x2="200" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7c5cff"/>
+      <stop offset="1" stop-color="#ff5c8a"/>
+    </linearGradient>
+    <mask id="wayl-m2" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <rect width="64" height="64" fill="#fff"/>
+      <g fill="#000">
+        <rect x="13" y="22" width="7" height="12" rx="3.5"/>
+        <rect x="23.5" y="14" width="7" height="28" rx="3.5"/>
+        <rect x="34" y="18" width="7" height="20" rx="3.5"/>
+        <circle cx="48" cy="28" r="3.5"/>
+      </g>
+    </mask>
+  </defs>
+  <path mask="url(#wayl-m2)" fill="url(#wayl-g2)" d="M18 4h28a14 14 0 0 1 14 14v20a14 14 0 0 1-14 14H26l-11.5 9.2A1.6 1.6 0 0 1 12 59.9V51.3A14 14 0 0 1 4 38V18A14 14 0 0 1 18 4z"/>
+  <path transform="translate(0 -3)" fill="none" stroke="url(#wayl-g3)" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round" d="M77.5 20.5L85 43.5 94 24.5 103 43.5 110.5 20.5M121.5 43.5L133 20.5 144.5 43.5M125.5 37.5H140.5M151.5 20.5L162.5 32.5 173.5 20.5M162.5 32.5V43.5M183 20.5V43.5H196.5"/>
+</svg>

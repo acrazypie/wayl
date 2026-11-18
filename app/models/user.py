@@ -1,30 +1,44 @@
-from werkzeug.security import generate_password_hash, check_password_hash
-from app.models import db
+from flask_login import UserMixin
+from werkzeug.security import check_password_hash, generate_password_hash
+
+from app.models import db, utcnow
 
 
-class UserModel(db.Model):
-    __tablename__ = "user"
+class UserModel(UserMixin, db.Model):
+    __tablename__ = "users"
+
     id = db.Column(db.Integer, primary_key=True)
-    google_id = db.Column(db.String(255), unique=True, nullable=False)
-    picture = db.Column(db.String(500))
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(200), nullable=True)
-    refresh_token = db.Column(db.String(500), nullable=True)
-    oauth_provider = db.Column(db.String, nullable=True)
-    oauth_id = db.Column(db.String, nullable=True)
+    email = db.Column(db.String(255), unique=True, nullable=False)  # stored lowercased
+    username = db.Column(db.String(30), unique=True, nullable=False)
+    bio = db.Column(db.String(160), nullable=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    # Bumped on password change/reset: invalidates other sessions, JWTs and reset links.
+    session_version = db.Column(db.Integer, nullable=False, default=0)
+    refresh_token = db.Column(db.String(500), nullable=True)  # sha256 of the refresh JWT
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     playlists = db.relationship("Playlist", backref="user", lazy=True)
     history = db.relationship("ListeningHistory", backref="user", lazy=True)
 
     def __repr__(self) -> str:
-        return f"User(name = {self.username}, email = {self.email})"
+        return f"User(id={self.id}, username={self.username})"
 
     def get_id(self):
-        return str(self.id)
+        # Stored in the session cookie; the version part logs out old sessions after a reset.
+        return f"{self.id}:{self.session_version or 0}"
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password) -> bool:
-        return check_password_hash(self.password_hash, password)
+        return bool(self.password_hash) and check_password_hash(self.password_hash, password)
+
+
+class Follow(db.Model):
+    __tablename__ = "follows"
+    __table_args__ = (db.UniqueConstraint("follower_id", "followed_id"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    follower_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    followed_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=utcnow)

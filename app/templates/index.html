@@ -2,25 +2,52 @@
 <html lang="en">
     <head>
         <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>WAYL | Home</title>
-        <link
-            rel="stylesheet"
-            href="{{ url_for('static', filename='style.css') }}"
-            defer />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <meta name="color-scheme" content="light dark" />
+        <meta name="theme-color" content="#f7f7fb" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#0e0e12" media="(prefers-color-scheme: dark)" />
+        <meta name="description" content="WAYL: log what you listen to, build playlists and see what your friends are playing." />
+        <title>WAYL · What Are You Listening?</title>
+        <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml" />
+        <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+        <script src="{{ url_for('static', filename='app.js') }}" defer></script>
     </head>
     <body>
-        <header>
-            <h3>What Are You Listening?</h3>
-        </header>
-        <main>
-            <form class="search-form">
-                <input type="text" name="q" placeholder="Search a song..." />
-                <button type="submit">🔎</button>
-            </form>
-        </main>
-        <footer>
-            <p>&copy; 2025 WAYL. All rights reserved.</p>
-        </footer>
+        <a class="skip-link" href="#main">Skip to content</a>
+
+        <div id="app" class="app" data-state="loading">
+            <aside class="sidebar" aria-label="Main navigation">
+                <a href="/search" class="sidebar-brand" aria-label="WAYL home">
+                    <img src="{{ url_for('static', filename='logo-wordmark.svg') }}" alt="WAYL" width="128" height="40" />
+                </a>
+                <nav id="nav" class="nav"></nav>
+                <p class="sidebar-credits">
+                    Music data from
+                    <a href="https://musicbrainz.org" target="_blank" rel="noopener">MusicBrainz</a> &amp;
+                    <a href="https://listenbrainz.org" target="_blank" rel="noopener">ListenBrainz</a>.
+                    Covers from the
+                    <a href="https://coverartarchive.org" target="_blank" rel="noopener">Cover Art Archive</a>.
+                </p>
+            </aside>
+
+            <header class="mobile-top">
+                <a href="/search" aria-label="WAYL home">
+                    <img src="{{ url_for('static', filename='logo-wordmark.svg') }}" alt="WAYL" width="96" height="30" />
+                </a>
+            </header>
+
+            <main id="main" class="main" tabindex="-1">
+                <div class="boot" aria-live="polite">
+                    <img src="{{ url_for('static', filename='logo.svg') }}" alt="" width="48" height="48" />
+                </div>
+            </main>
+
+            <nav id="tabbar" class="tabbar" aria-label="Main navigation"></nav>
+        </div>
+
+        <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+        <dialog id="dialog" class="dialog"></dialog>
+
+        <noscript><p class="noscript">WAYL needs JavaScript to run.</p></noscript>
     </body>
 </html>
