@@ -45,8 +45,8 @@ first so its health check (which the worker waits for) is kept:
 
 Open **Settings → Music servers**.
 
-**Navidrome** (or any Subsonic-compatible server): enter its address *as WAYL's server can reach
-it* (`http://navidrome:4533` if both run in the same Compose project, otherwise its LAN address),
+**Navidrome** (or any Subsonic-compatible server): enter its address _as WAYL's server can reach
+it_ (`http://navidrome:4533` if both run in the same Compose project, otherwise its LAN address),
 plus your Navidrome username and password. The password is stored encrypted and only a salted hash
 of it is ever sent to Navidrome.
 
@@ -76,7 +76,7 @@ your own plays. No Plex Pass needed.
   "Teardrop"), or by MusicBrainz id when your files are tagged with one.
 - **Search → In my library**: searches only your server's tracks (WAYL's own index, so it's
   instant). The filter stays on until you switch it off.
-- **Play** buttons on songs you own: audio streams from your server *through* WAYL, so your
+- **Play** buttons on songs you own: audio streams from your server _through_ WAYL, so your
   server's address and login never reach the browser. Plays count as a listen once half the song
   (or 4 minutes) has played. Files play as-is (no transcoding), so the browser must support the
   format: MP3, AAC/M4A, FLAC, Ogg and Opus work in current browsers; ALAC usually doesn't.
@@ -165,12 +165,12 @@ out everywhere else (sessions, API tokens and older reset links all stop working
 
 ## Where the music data comes from
 
-| Service | Used for | Cost / key |
-| --- | --- | --- |
-| ListenBrainz Labs recording search | Song search | Free, no key |
-| ListenBrainz metadata + popularity API | Album, year, genres, credits, cover ids, play counts, artist top tracks | Free, no key |
-| MusicBrainz web service | Artist search and details | Free for non-commercial use, no key, max 1 request/second (the app throttles itself) |
-| Cover Art Archive | Album covers | Free, images linked directly |
+| Service                                | Used for                                                                | Cost / key                                                                           |
+| -------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| ListenBrainz Labs recording search     | Song search                                                             | Free, no key                                                                         |
+| ListenBrainz metadata + popularity API | Album, year, genres, credits, cover ids, play counts, artist top tracks | Free, no key                                                                         |
+| MusicBrainz web service                | Artist search and details                                               | Free for non-commercial use, no key, max 1 request/second (the app throttles itself) |
+| Cover Art Archive                      | Album covers                                                            | Free, images linked directly                                                         |
 
 MusicBrainz core data is [CC0](https://musicbrainz.org/doc/About/Data_License) (public domain), so
 storing it in your database is fine. A song is copied into the local `songs` table the first time
@@ -261,3 +261,9 @@ Song ids are MusicBrainz recording ids (UUIDs).
 When you have a server connected, song objects also carry `"owned": true/false`.
 
 Sign-in, registration and password reset are rate limited per IP.
+
+## License
+
+The code is licensed under the [GNU General Public License v3.0](LICENSE).
+
+The wayl name and logos (`app/static/favicon.svg`, `app/static/logo-wordmark.svg`, `app/static/logo.svg`) are not covered by the GPL. Please don't use them for forks or other projects without permission.
