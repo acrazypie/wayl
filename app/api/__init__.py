@@ -36,6 +36,13 @@ from app.api.servers import (
     UnmatchedListens,
 )
 from app.api.sharing import MySharing, MySharingReset, PlaylistShare, PlaylistShareReset
+from app.api.subscriptions import (
+    SubscriptionCopy,
+    SubscriptionDetail,
+    SubscriptionList,
+    SubscriptionOpen,
+    SubscriptionRefresh,
+)
 from app.api.user import ChangePassword, Me, UserPlaylists, UserProfile
 from app.utility import social_enabled
 
@@ -99,6 +106,11 @@ def register_routes(app):
     add(PlaylistShareReset, "/api/playlists/<int:playlist_id>/share/reset")
     add(MySharing, "/api/me/sharing")
     add(MySharingReset, "/api/me/sharing/reset")
+    add(SubscriptionList, "/api/subscriptions")
+    add(SubscriptionDetail, "/api/subscriptions/<int:sub_id>")
+    add(SubscriptionRefresh, "/api/subscriptions/<int:sub_id>/refresh")
+    add(SubscriptionOpen, "/api/subscriptions/<int:sub_id>/open")
+    add(SubscriptionCopy, "/api/subscriptions/<int:sub_id>/copy")
     add(HistoryList, "/api/history")
     add(Stats, "/api/stats")
 

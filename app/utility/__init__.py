@@ -85,6 +85,8 @@ class Config:
 
     # Follows + feed between users of this instance. Off by default: WAYL is a personal log first.
     SOCIAL_ENABLED = _flag("WAYL_SOCIAL", "0")
+    # How often subscribed share links from other instances are re-fetched (with backoff on errors).
+    SHARE_REFRESH_HOURS = float(os.getenv("SHARE_REFRESH_HOURS", "6"))
 
     RATELIMIT_ENABLED = _flag("RATELIMIT_ENABLED", "1")
     RATELIMIT_STORAGE_URI = os.getenv("RATELIMIT_STORAGE_URI", "memory://")

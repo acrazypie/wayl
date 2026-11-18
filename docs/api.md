@@ -124,6 +124,23 @@ Read-only share links any WAYL (or other client) can read. Formats and rules:
 `GET /api/playlists/<id>` includes `share: {shared, url}`; `GET /api/playlists` items include
 `shared`.
 
+### Subscribing
+
+Follow share links from other instances (or this one). Remote documents are validated and cached;
+the worker refreshes them every `SHARE_REFRESH_HOURS` with backoff on errors, keeping the last good
+copy. Tracks come back in the usual song shape `{id (mbid), title, artist, artist_id, album, cover,
+duration, owned, track_id?}`: `owned` is `null` when you have no media server, and owned tracks
+carry the `track_id` of your own library track, playable with `/api/stream/<track_id>`.
+
+| Method | Path | Auth | Notes |
+| --- | --- | --- | --- |
+| GET | `/api/subscriptions` | ✔ | `[{id, kind, url, title, owner_name, count, updated_at, fetched_at, last_error}]` |
+| POST | `/api/subscriptions` | ✔ | `{url}`: fetched now; 201 new, 200 if you already had it, 400 with a readable error otherwise. 30/hour |
+| GET / DELETE | `/api/subscriptions/<id>` | owner | the cached document: playlist → `tracks[], total, owned_count, owner_profile_url`; profile → `bio, playlists[] (with subscription_id once opened), recent_listens[]?, top_artists[]?` / remove |
+| POST | `/api/subscriptions/<id>/refresh` | owner | fetch again now (conditional request) |
+| POST | `/api/subscriptions/<id>/open` | owner | profile only: `{url}` of one of its playlists → that playlist (cached as a child subscription) |
+| POST | `/api/subscriptions/<id>/copy` | owner | copy into a new playlist "<name> (from <owner>)"; for a profile pass `{playlist_url}` → `{playlist_id, skipped}` |
+
 ## Social (only when `features.social` is true)
 
 Off by default (`WAYL_SOCIAL=0`); then these paths return 404.

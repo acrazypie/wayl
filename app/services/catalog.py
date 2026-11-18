@@ -220,6 +220,8 @@ def lookup_recordings(mbids):
     found, missing = {}, []
     for m in wanted:
         cached = _meta_cache.get(("rec", m))
+        if cached is False:
+            continue  # known not to exist (cached "not found")
         if cached is not None:
             found[m] = cached
         else:
@@ -236,6 +238,8 @@ def lookup_recordings(mbids):
                 found[m] = _meta_cache.get(("rec", m)) or track_from_metadata(m, data[m])
                 _meta_cache.set(("rec", m), found[m])
                 _meta_cache.set(("raw", m), data[m])
+            else:
+                _meta_cache.set(("rec", m), False)  # don't ask again for an unknown recording
     return found
 
 
