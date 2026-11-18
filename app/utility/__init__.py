@@ -20,11 +20,29 @@ log = logging.getLogger(__name__)
 
 
 def _secret_key():
+    """SECRET_KEY from the environment, else from SECRET_KEY_FILE (created on first start, which
+    is what the Docker image does), else a random one that only lasts until restart."""
     key = os.getenv("SECRET_KEY")
-    if not key:
-        log.warning("SECRET_KEY is not set: using a random key, so sessions and tokens reset on restart.")
-        key = secrets.token_hex(32)
-    return key
+    if key:
+        return key
+    path = os.getenv("SECRET_KEY_FILE")
+    if path:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                key = fh.read().strip()
+        except FileNotFoundError:
+            key = secrets.token_hex(32)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(key)
+            log.warning("Generated a new SECRET_KEY in %s. Keep this file: it also encrypts media server logins.", path)
+        except FileExistsError:  # another process created it at the same moment
+            with open(path, encoding="utf-8") as fh:
+                key = fh.read().strip()
+        if key:
+            return key
+    log.warning("SECRET_KEY is not set: using a random key, so sessions and tokens reset on restart.")
+    return secrets.token_hex(32)
 
 
 def _flag(name, default="0"):
@@ -53,6 +71,17 @@ class Config:
     # Music catalog (MusicBrainz / ListenBrainz). They ask for a meaningful User-Agent.
     CATALOG_USER_AGENT = os.getenv("CATALOG_USER_AGENT", "WAYL/1.0 (self-hosted music log)")
     CATALOG_TIMEOUT = float(os.getenv("CATALOG_TIMEOUT", "8"))
+
+    # Number of reverse proxies in front of the app (X-Forwarded-* headers are trusted only then).
+    TRUST_PROXY_HOPS = int(os.getenv("TRUST_PROXY_HOPS", "0"))
+
+    # Media servers (Plex / Navidrome). Self-hosted servers usually live on the local network, so
+    # private addresses are allowed by default; turn this off on a public, multi-user instance.
+    ALLOW_PRIVATE_SERVER_URLS = _flag("ALLOW_PRIVATE_SERVER_URLS", "1")
+    HISTORY_IMPORT_DAYS = int(os.getenv("HISTORY_IMPORT_DAYS", "30"))  # first Plex sync looks back this far
+    WORKER_INTERVAL = int(os.getenv("WORKER_INTERVAL", "60"))  # seconds between worker rounds
+    PLEX_HISTORY_INTERVAL = int(os.getenv("PLEX_HISTORY_INTERVAL", "300"))
+    PLAYLIST_SYNC_INTERVAL = int(os.getenv("PLAYLIST_SYNC_INTERVAL", str(6 * 3600)))
 
     RATELIMIT_ENABLED = _flag("RATELIMIT_ENABLED", "1")
     RATELIMIT_STORAGE_URI = os.getenv("RATELIMIT_STORAGE_URI", "memory://")

@@ -11,6 +11,12 @@
 - **Songs:** come from the catalog, not a local library. Public song ids are MusicBrainz recording
   ids; a local `Song` row is created on first save/log/playlist-add (`ensure_song`). Tests must never
   hit the network: they monkeypatch `catalog._request` (see `tests/conftest.py`).
+- **Media servers:** `app/services/media/` (Plex + Subsonic clients; all HTTP goes through
+  `media.base.http`, which tests replace), `app/services/matching.py` (server track → catalog song,
+  "owned" checks), `app/services/sync.py` (library / listens / playlists), `app/worker.py` (runs
+  the sync loop), `app/api/listenbrainz.py` (ListenBrainz-compatible scrobble API),
+  `app/routes/stream.py` (audio proxy). Server logins are encrypted with `secrets_box` and must
+  never be returned by the API or sent to the browser; other users' servers/tracks must 404.
 
 ## Rules (don't break these)
 
@@ -37,15 +43,17 @@
 
 ## Phase 1: make it deployable
 
-- [ ] Add **Flask-Migrate** (Alembic) and create the initial migration. From here on, no more
-      "delete the database" schema changes.
-- [ ] Move config into a `Config` class with `DevelopmentConfig` / `ProductionConfig`; in
-      production, refuse to start without `SECRET_KEY`, set `SESSION_COOKIE_SECURE=True`, and
-      drop `ALLOW_INSECURE_OAUTH`.
-- [ ] Add **Flask-Limiter**: strict limits on `/auth/*`, moderate on all writes.
-- [ ] Add `ProxyFix` so OAuth redirects work behind a reverse proxy (https).
-- [ ] Add `gunicorn`, a `Dockerfile`, and a `/healthz` route. Deploy notes in the README for one
-      host (Fly.io, Render, or Railway) with Postgres instead of SQLite.
+- [x] Add **Flask-Migrate** (Alembic) and create the initial migration. From here on, no more
+      "delete the database" schema changes: every model change ships with a migration in
+      `migrations/versions/` (`flask --app app db migrate`, then review it).
+- [ ] Move config into a `Config` class with `DevelopmentConfig` / `ProductionConfig`. Done so
+      far: secure cookies when `APP_URL` is https, `SECRET_KEY_FILE` (auto-created in Docker).
+      Still missing: refuse to start without a key in production.
+- [ ] Add **Flask-Limiter**: strict limits on `/auth/*` (done), moderate on all writes (not yet).
+- [x] Add `ProxyFix` (opt-in with `TRUST_PROXY_HOPS`) so redirects/URLs work behind a reverse proxy.
+- [x] Add `gunicorn`, a `Dockerfile`, `docker-compose.yml` (web + worker) and a `/healthz` route.
+      Self-hosting notes are in the README.
+- [ ] Deploy notes for one host (Fly.io, Render, or Railway) with Postgres instead of SQLite.
 - [ ] GitHub Actions workflow running `pytest -q` on every push.
 
 ## Phase 2: make it feel like a product

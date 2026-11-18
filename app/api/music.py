@@ -103,8 +103,19 @@ def saved_ids(user, mbids):
 
 
 def with_saved(user, tracks):
+    """Add the viewer's flags to song dicts: "saved", and "owned" (on one of their servers).
+    "owned" is only present when the viewer has a server connected."""
+    from app.services.matching import owned_song_ids
+
     saved = saved_ids(user, [t["id"] for t in tracks])
-    return [{**t, "saved": t["id"] in saved} for t in tracks]
+    owned = owned_song_ids(user, tracks)
+    out = []
+    for t in tracks:
+        item = {**t, "saved": t["id"] in saved}
+        if owned is not None:
+            item["owned"] = t["id"] in owned
+        out.append(item)
+    return out
 
 
 def listen_dict(entry):
@@ -112,16 +123,25 @@ def listen_dict(entry):
 
 
 def listens_for(viewer, entries, with_user=False):
-    """Listen dicts with each song's "saved" flag for the viewer."""
-    saved = saved_ids(viewer, [e.song.mbid for e in entries])
+    """Listen dicts with each song's "saved" (and "owned") flag for the viewer."""
+    flagged = {s["id"]: s for s in with_saved(viewer, [e.song.to_dict() for e in entries])}
     items = []
     for e in entries:
         item = listen_dict(e)
-        item["song"]["saved"] = e.song.mbid in saved
+        item["song"] = flagged[e.song.mbid]
+        item["source"] = e.source
         if with_user:
             item["user"] = {"id": e.user.id, "username": e.user.username}
         items.append(item)
     return items
+
+
+def _synced_from(playlist):
+    """"plex"/"navidrome" if this playlist mirrors one on the owner's server."""
+    from app.models.server import ImportedPlaylist
+
+    link = ImportedPlaylist.query.filter_by(playlist_id=playlist.id).first()
+    return link.server.kind if link else None
 
 
 def playlist_dict(playlist, with_songs=False):
@@ -140,6 +160,7 @@ def playlist_dict(playlist, with_songs=False):
         "song_count": len(playlist.songs),
         "covers": covers,
         "created_at": iso(playlist.created_at),
+        "synced_from": _synced_from(playlist),
     }
     if with_songs:
         data["songs"] = [{**ps.song.to_dict(), "added_at": iso(ps.added_at)} for ps in playlist.songs]
@@ -197,8 +218,7 @@ class SongDetail(Resource):
             if user:
                 my_plays = ListeningHistory.query.filter_by(song_id=local.id, user_id=user.id).count()
         return {
-            **detail,
-            "saved": mbid in saved_ids(user, [mbid]),
+            **with_saved(user, [detail])[0],
             "my_plays": my_plays,
             "wayl_plays": community_plays,
         }
@@ -376,8 +396,15 @@ class HistoryList(Resource):
 
     @auth_required
     def post(self):
-        """Log a listen: {"song_id": "<mbid>"}. Repeats within 30s are ignored (double-clicks)."""
-        song, error = song_from_body()
+        """Log a listen: {"song_id": "<mbid>"}, or {"track_id": <library track>} for a song
+        played from your server. Add "source": "player" when WAYL's player logged it.
+        Repeats within 30s are ignored (double-clicks)."""
+        data = json_body()
+        source = "player" if data.get("source") == "player" else None
+        if data.get("track_id") is not None:
+            song, error = self._song_from_library(data.get("track_id"))
+        else:
+            song, error = song_from_body()
         if error:
             return error
 
@@ -390,10 +417,30 @@ class HistoryList(Resource):
             db.session.commit()
             return {"message": "Listening recorded", "created": False, "item": listen_dict(recent)}, 200
 
-        entry = ListeningHistory(user_id=g.current_user.id, song_id=song.id)
+        entry = ListeningHistory(user_id=g.current_user.id, song_id=song.id, source=source)
         db.session.add(entry)
         db.session.commit()
         return {"message": "Listening recorded", "created": True, "item": listen_dict(entry)}, 201
+
+    @staticmethod
+    def _song_from_library(track_id):
+        from app.models.server import ServerTrack
+        from app.services.matching import resolve_server_track
+
+        try:
+            st = db.session.get(ServerTrack, int(track_id))
+        except (TypeError, ValueError):
+            st = None
+        if st is None or st.server.user_id != g.current_user.id:
+            return None, ({"error": "Track not found"}, 404)
+        try:
+            song = resolve_server_track(st)
+        except catalog.CatalogError:
+            return None, CATALOG_DOWN
+        if song is None:
+            db.session.commit()
+            return None, ({"error": "This track isn't in MusicBrainz, so it can't be logged"}, 404)
+        return song, None
 
 
 class FeedList(Resource):
@@ -455,6 +502,6 @@ class Stats(Resource):
             "days": days,
             "total_listens": total_plays,
             "total_minutes": round(total_seconds / 60),
-            "top_songs": [{**s.to_dict(), "plays": n} for s, n in top_songs],
+            "top_songs": with_saved(g.current_user, [{**s.to_dict(), "plays": n} for s, n in top_songs]),
             "top_artists": [{"id": r[0], "name": r[1], "plays": r[2]} for r in top_artists],
         }

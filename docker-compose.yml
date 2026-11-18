@@ -1,0 +1,45 @@
+# WAYL with its background worker. Start with:  docker compose up -d
+# Then open APP_URL (default http://localhost:8000). See README → "Self-hosting with Docker".
+
+x-wayl-env: &wayl-env
+  # Public address of WAYL (used in password-reset emails, Plex sign-in, scrobble API URL).
+  APP_URL: ${APP_URL:-http://localhost:8000}
+  # Leave empty to auto-generate one in the data volume (keep that volume!).
+  SECRET_KEY: ${SECRET_KEY:-}
+  # Set to 1 when WAYL runs behind a reverse proxy (Caddy, nginx, Traefik).
+  TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-0}
+  # Set to 0 on a public instance so users can't make WAYL connect to your private network.
+  ALLOW_PRIVATE_SERVER_URLS: ${ALLOW_PRIVATE_SERVER_URLS:-1}
+  HISTORY_IMPORT_DAYS: ${HISTORY_IMPORT_DAYS:-30}
+  CATALOG_USER_AGENT: ${CATALOG_USER_AGENT:-WAYL/1.0 (self-hosted music log)}
+  MAIL_SERVER: ${MAIL_SERVER:-}
+  MAIL_PORT: ${MAIL_PORT:-587}
+  MAIL_USE_TLS: ${MAIL_USE_TLS:-1}
+  MAIL_USERNAME: ${MAIL_USERNAME:-}
+  MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+  MAIL_FROM: ${MAIL_FROM:-}
+
+services:
+  wayl:
+    build: .
+    image: wayl:latest
+    restart: unless-stopped
+    ports:
+      - "${WAYL_PORT:-8000}:8000"
+    environment: *wayl-env
+    volumes:
+      - wayl-data:/data
+
+  worker:
+    image: wayl:latest
+    command: worker
+    restart: unless-stopped
+    environment: *wayl-env
+    volumes:
+      - wayl-data:/data
+    depends_on:
+      wayl:
+        condition: service_healthy
+
+volumes:
+  wayl-data:

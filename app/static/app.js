@@ -56,6 +56,14 @@
         play: ["m7 4 13 8-13 8z"],
         userPlus: ["M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", "c:9,7,4", "M19 8v6", "M22 11h-6"],
         check: ["M20 6 9 17l-5-5"],
+        server: ["r:2,13,20,8,2", "M2 13 5.5 5h13L22 13", "M6 17h.01", "M10 17h.01"],
+        pause: ["r:6,4,4,16,1", "r:14,4,4,16,1"],
+        skipNext: ["m5 4 10 8-10 8z", "M19 5v14"],
+        skipPrev: ["m19 20-10-8 10-8z", "M5 19V5"],
+        sliders: ["M4 21v-7", "M4 10V3", "M12 21v-9", "M12 8V3", "M20 21v-5", "M20 12V3", "M1 14h6", "M9 8h6", "M17 16h6"],
+        refresh: ["M21 12a9 9 0 1 1-3-6.7L21 8", "M21 3v5h-5"],
+        key: ["c:7.5,15.5,5.5", "m21 2-9.6 9.6", "m15.5 7.5 3 3L22 7l-3-3"],
+        copy: ["r:9,9,13,13,2", "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"],
     };
 
     function icon(name, label) {
@@ -94,6 +102,25 @@
     // --- state & API ------------------------------------------------------------------
 
     const state = { me: null, playlists: null };
+
+    /** Per-browser preferences (e.g. the search filter). Storage can be unavailable: ignore. */
+    const prefs = {
+        get(key) {
+            try {
+                return localStorage.getItem("wayl-" + key);
+            } catch {
+                return null;
+            }
+        },
+        set(key, value) {
+            try {
+                if (value) localStorage.setItem("wayl-" + key, value);
+                else localStorage.removeItem("wayl-" + key);
+            } catch {
+                /* private mode etc. */
+            }
+        },
+    };
 
     async function api(path, { method = "GET", body } = {}) {
         const init = {
@@ -340,36 +367,88 @@
         return btn;
     }
 
+    /** "On your server" badge. Only songs that have the flag get one (it's only sent when the
+     * viewer has a server connected). */
+    function ownedBadge(song) {
+        if (!song.owned) return null;
+        const where = song.server ? serverLabel(song.server) : "your server";
+        return h("span", { class: "owned", title: `In your library on ${where}`, role: "img", "aria-label": `In your library on ${where}` }, icon("server"));
+    }
+
+    function serverLabel(kind) {
+        return kind === "plex" ? "Plex" : kind === "navidrome" ? "Navidrome" : "your server";
+    }
+
+    const canPlay = (song) => !!(state.me && state.me.has_servers && (song.owned || song.track_id));
+
+    /** Library-only tracks (on your server, not found in MusicBrainz yet) get matched on demand. */
+    async function ensureCatalog(song) {
+        if (song.id) return true;
+        try {
+            const res = await api(`/api/library/tracks/${song.track_id}/match`, { method: "POST" });
+            Object.assign(song, res, { library_only: false });
+            return true;
+        } catch (err) {
+            toast(err.message, "error");
+            return false;
+        }
+    }
+
     function songRow(song, opts = {}) {
         const sub = [];
         if (song.artist_id) sub.push(h("a", { href: `/artist/${song.artist_id}` }, song.artist));
         else sub.push(song.artist);
         if (song.album) sub.push(" · ", song.album);
 
+        const playable = canPlay(song);
+        const lead = playable
+            ? h(
+                  "button",
+                  { type: "button", class: "cover-btn", "aria-label": `Play “${song.title}”`, title: "Play from your server", onclick: () => playQueue(opts.queue || [song], opts.queueIndex || 0) },
+                  cover(song.cover),
+                  h("span", { class: "cover-play" }, icon("play"))
+              )
+            : cover(song.cover);
+
         const actions = h(
             "div",
             { class: "row-meta row-actions" },
-            opts.time ? h("span", { class: "row-time" }, opts.time) : h("span", { class: "row-time" }, duration(song.duration)),
-            saveButton(song),
+            h("span", { class: "row-time" }, opts.time || duration(song.duration)),
+            song.id ? saveButton(song) : h("span", { class: "icon-btn-spacer", "aria-hidden": "true" }),
             h(
                 "button",
-                { type: "button", class: "icon-btn", title: "I'm listening to this", "aria-label": `Log a listen of “${song.title}”`, onclick: () => logListen(song) },
+                {
+                    type: "button",
+                    class: "icon-btn",
+                    title: "I'm listening to this",
+                    "aria-label": `Log a listen of “${song.title}”`,
+                    onclick: async () => (await ensureCatalog(song)) && logListen(song),
+                },
                 icon("headphones")
             ),
             opts.onRemove
                 ? h("button", { type: "button", class: "icon-btn", title: "Remove", "aria-label": `Remove “${song.title}”`, onclick: opts.onRemove }, icon("x"))
                 : h(
                       "button",
-                      { type: "button", class: "icon-btn", title: "Add to playlist", "aria-label": `Add “${song.title}” to a playlist`, onclick: () => addToPlaylistDialog(song) },
+                      {
+                          type: "button",
+                          class: "icon-btn",
+                          title: "Add to playlist",
+                          "aria-label": `Add “${song.title}” to a playlist`,
+                          onclick: async () => (await ensureCatalog(song)) && addToPlaylistDialog(song),
+                      },
                       icon("plus")
                   )
         );
 
+        const title = song.id
+            ? h("a", { class: "row-title", href: `/song/${song.id}` }, song.title)
+            : h("span", { class: "row-title", title: "On your server, not found in MusicBrainz" }, song.title);
         return h(
             "li",
-            { class: "row" },
-            h("div", { class: "row-lead" }, opts.index ? h("span", { class: "row-index" }, opts.index) : null, cover(song.cover)),
-            h("div", { class: "row-main" }, h("a", { class: "row-title", href: `/song/${song.id}` }, song.title), h("span", { class: "row-sub" }, sub)),
+            { class: "row" + (player.current && player.current === song ? " is-playing" : "") },
+            h("div", { class: "row-lead" }, opts.index ? h("span", { class: "row-index" }, opts.index) : null, lead),
+            h("div", { class: "row-main" }, h("div", { class: "row-title-line" }, title, ownedBadge(song)), h("span", { class: "row-sub" }, sub)),
             actions
         );
     }
@@ -378,8 +457,162 @@
         return h(
             "ul",
             { class: "list" },
-            songs.map((s, i) => songRow(s, { index: opts.numbered ? i + 1 : null, ...(opts.rowOpts ? opts.rowOpts(s, i) : {}) }))
+            songs.map((s, i) =>
+                songRow(s, { index: opts.numbered ? i + 1 : null, queue: songs, queueIndex: i, ...(opts.rowOpts ? opts.rowOpts(s, i) : {}) })
+            )
         );
+    }
+
+    // --- player ---------------------------------------------------------------------------------
+    // Streams from the user's own server through /api/stream (the server's login stays on the
+    // WAYL server). A listen is logged once half the song (or 4 minutes) has played.
+
+    const player = { queue: [], index: -1, current: null, logged: false, audio: new Audio(), bar: null };
+    player.audio.preload = "auto";
+
+    async function streamUrl(song) {
+        if (song.track_id) return `/api/stream/${song.track_id}`;
+        const sources = (await api(`/api/songs/${song.id}/sources`)).items;
+        if (!sources.length) return null;
+        song.track_id = sources[0].track_id;
+        song.server = song.server || sources[0].server;
+        return sources[0].stream_url;
+    }
+
+    function playQueue(songs, start) {
+        player.queue = songs.filter(canPlay);
+        const first = songs[start];
+        player.index = Math.max(0, player.queue.indexOf(first));
+        playAt(player.index);
+    }
+
+    async function playAt(i, tries = 0) {
+        if (i < 0 || i >= player.queue.length) return;
+        const song = player.queue[i];
+        player.index = i;
+        player.current = song;
+        player.logged = false;
+        renderPlayer();
+        let url;
+        try {
+            url = await streamUrl(song);
+        } catch (err) {
+            toast(err.message, "error");
+        }
+        if (player.current !== song) return; // user picked another song meanwhile
+        if (!url) {
+            toast(`“${song.title}” isn't on your server`, "error");
+            if (tries < 3 && i + 1 < player.queue.length) playAt(i + 1, tries + 1);
+            return;
+        }
+        player.audio.src = url;
+        try {
+            await player.audio.play();
+        } catch (err) {
+            if (err.name !== "AbortError") toast("Couldn't play this track. Your browser may not support its format.", "error");
+        }
+        if ("mediaSession" in navigator) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: song.title,
+                artist: song.artist,
+                album: song.album || "",
+                artwork: isHttpUrl(song.cover) ? [{ src: song.cover, sizes: "250x250", type: "image/jpeg" }] : [],
+            });
+        }
+        markPlayingRows();
+    }
+
+    function markPlayingRows() {
+        for (const row of document.querySelectorAll(".row.is-playing")) row.classList.remove("is-playing");
+    }
+
+    async function maybeLogPlay() {
+        const a = player.audio;
+        const song = player.current;
+        if (player.logged || !song || !a.duration || !isFinite(a.duration)) return;
+        if (a.currentTime < Math.min(a.duration / 2, 240)) return;
+        player.logged = true;
+        try {
+            const body = song.id ? { song_id: song.id, source: "player" } : { track_id: song.track_id, source: "player" };
+            const res = await api("/api/history", { method: "POST", body });
+            if (res.item && !song.id) Object.assign(song, res.item.song); // it got matched on the way
+        } catch {
+            /* not in MusicBrainz: nothing to log */
+        }
+    }
+
+    function fmtClock(sec) {
+        if (!isFinite(sec) || sec < 0) return "0:00";
+        return duration(Math.floor(sec)) || "0:00";
+    }
+
+    function buildPlayer() {
+        const audio = player.audio;
+        const playBtn = h("button", { type: "button", class: "icon-btn play-main", "aria-label": "Pause" }, icon("pause"));
+        const prevBtn = h("button", { type: "button", class: "icon-btn", "aria-label": "Previous", onclick: () => (audio.currentTime > 5 ? (audio.currentTime = 0) : playAt(player.index - 1)) }, icon("skipPrev"));
+        const nextBtn = h("button", { type: "button", class: "icon-btn", "aria-label": "Next", onclick: () => playAt(player.index + 1) }, icon("skipNext"));
+        const closeBtn = h("button", { type: "button", class: "icon-btn", "aria-label": "Close player", onclick: () => {
+            audio.pause();
+            audio.removeAttribute("src");
+            audio.load();
+            player.current = null;
+            renderPlayer();
+        } }, icon("x"));
+        const seek = h("input", { type: "range", min: "0", max: "1000", value: "0", class: "seek", "aria-label": "Seek" });
+        const time = h("span", { class: "player-time" }, "0:00");
+        const total = h("span", { class: "player-time" }, "0:00");
+        const info = h("div", { class: "player-info" });
+        const art = h("div", { class: "player-art" });
+        const bar = h(
+            "div",
+            { class: "player", role: "region", "aria-label": "Player", hidden: true },
+            h("div", { class: "player-track" }, art, info),
+            h("div", { class: "player-center" }, h("div", { class: "player-controls" }, prevBtn, playBtn, nextBtn), h("div", { class: "player-progress" }, time, seek, total)),
+            h("div", { class: "player-end" }, closeBtn)
+        );
+        playBtn.addEventListener("click", () => (audio.paused ? audio.play() : audio.pause()));
+        let seeking = false;
+        seek.addEventListener("input", () => (seeking = true));
+        seek.addEventListener("change", () => {
+            if (audio.duration) audio.currentTime = (seek.value / 1000) * audio.duration;
+            seeking = false;
+        });
+        audio.addEventListener("timeupdate", () => {
+            if (!seeking && audio.duration) seek.value = String(Math.round((audio.currentTime / audio.duration) * 1000));
+            time.textContent = fmtClock(audio.currentTime);
+            total.textContent = fmtClock(audio.duration);
+            maybeLogPlay();
+        });
+        const paint = () => {
+            playBtn.replaceChildren(icon(audio.paused ? "play" : "pause"));
+            playBtn.setAttribute("aria-label", audio.paused ? "Play" : "Pause");
+        };
+        audio.addEventListener("play", paint);
+        audio.addEventListener("pause", paint);
+        audio.addEventListener("ended", () => playAt(player.index + 1));
+        audio.addEventListener("error", () => player.current && audio.src && toast("Playback failed. Is your server reachable?", "error"));
+        if ("mediaSession" in navigator) {
+            navigator.mediaSession.setActionHandler("previoustrack", () => playAt(player.index - 1));
+            navigator.mediaSession.setActionHandler("nexttrack", () => playAt(player.index + 1));
+        }
+        document.body.append(bar);
+        player.bar = { bar, info, art, prevBtn, nextBtn };
+    }
+
+    function renderPlayer() {
+        const { bar, info, art, prevBtn, nextBtn } = player.bar;
+        const song = player.current;
+        bar.hidden = !song;
+        document.body.classList.toggle("has-player", !!song);
+        if (!song) return;
+        clear(art, cover(song.cover));
+        clear(
+            info,
+            song.id ? h("a", { class: "row-title", href: `/song/${song.id}` }, song.title) : h("span", { class: "row-title" }, song.title),
+            h("span", { class: "row-sub" }, song.artist)
+        );
+        prevBtn.disabled = player.index <= 0;
+        nextBtn.disabled = player.index >= player.queue.length - 1;
     }
 
     async function loadPlaylists(force = false) {
@@ -517,6 +750,7 @@
         [/^\/playlists\/(\d+)$/, pagePlaylist],
         [/^\/songs$/, pageMySongs],
         [/^\/profile$/, pageProfile],
+        [/^\/settings$/, pageSettings],
         [/^\/song\/([0-9a-f-]{36})$/, pageSong],
         [/^\/artist\/([0-9a-f-]{36})$/, pageArtist],
         [/^\/user\/(\d+)$/, pageUser],
@@ -540,14 +774,14 @@
     }
 
     function buildNav() {
-        const make = (cls) =>
-            NAV.map(([href, label, ic]) => h("a", { href, class: cls }, icon(ic), h("span", {}, label)));
-        clear($("#nav"), make(""));
-        clear($("#tabbar"), make(""));
+        const link = ([href, label, ic]) => h("a", { href }, icon(ic), h("span", {}, label));
+        clear($("#nav"), NAV.map(link), h("hr", { class: "nav-sep" }), link(["/settings", "Settings", "sliders"]));
+        clear($("#tabbar"), NAV.map(link));
+        clear($("#mobile-actions"), h("a", { href: "/settings", class: "icon-btn", "aria-label": "Settings" }, icon("sliders")));
     }
 
     function markNav(path) {
-        for (const a of document.querySelectorAll("#nav a, #tabbar a")) {
+        for (const a of document.querySelectorAll("#nav a, #tabbar a, #mobile-actions a")) {
             const href = a.getAttribute("href");
             const active = path === href || path.startsWith(href + "/");
             if (active) a.setAttribute("aria-current", "page");
@@ -791,10 +1025,60 @@
         });
         const form = h("form", { class: "search-box", role: "search" }, icon("search"), input);
         const results = h("div", { class: "section" });
-        clear(main, pageHead("Search", "Find any song in the open MusicBrainz database."), form, results);
+
+        // "In my library" filter: kept (in this browser) until switched off by hand.
+        let libraryOnly = state.me.has_servers && prefs.get("search-library") === "1";
+        const filterBtn = h("button", { type: "button", class: "chip filter-chip" });
+        const paintFilter = () => {
+            filterBtn.classList.toggle("is-on", libraryOnly);
+            filterBtn.setAttribute("aria-pressed", String(libraryOnly));
+            filterBtn.replaceChildren(...[icon("server"), "In my library", libraryOnly && icon("x")].filter(Boolean));
+            filterBtn.title = libraryOnly ? "Showing only songs on your server. Click to search everything." : "Only show songs on your server";
+            input.placeholder = libraryOnly ? "Search your library…" : "Search a song, an artist, or both…";
+        };
+        filterBtn.addEventListener("click", () => {
+            libraryOnly = !libraryOnly;
+            prefs.set("search-library", libraryOnly ? "1" : "");
+            paintFilter();
+            run();
+        });
+        paintFilter();
+        const filters = state.me.has_servers ? h("div", { class: "hint-row" }, filterBtn) : null;
+        clear(
+            main,
+            pageHead("Search", state.me.has_servers ? "Find any song, or just the ones on your server." : "Find any song in the open MusicBrainz database."),
+            form,
+            filters,
+            results
+        );
 
         let seq = 0;
         let timer;
+
+        async function runLibrary(q, mine, offset = 0, list = null) {
+            if (!list) clear(results, skeleton(6));
+            let res;
+            try {
+                res = await api(`/api/library?limit=50&offset=${offset}&q=${encodeURIComponent(q)}`);
+            } catch (err) {
+                if (mine === seq && alive()) clear(results, errorBox(err, run));
+                return;
+            }
+            if (mine !== seq || !alive()) return;
+            const songs = list ? list.concat(res.items) : res.items;
+            const more =
+                songs.length < res.total
+                    ? h("button", { type: "button", class: "btn", onclick: (e) => { e.target.disabled = true; runLibrary(q, mine, songs.length, songs); } }, `Load more (${res.total - songs.length} left)`)
+                    : null;
+            clear(
+                results,
+                h("h2", { class: "section-title" }, q ? "In your library" : "Your library", h("span", { class: "muted small" }, `${res.total} ${res.total === 1 ? "track" : "tracks"}`)),
+                songs.length
+                    ? songList(songs)
+                    : empty("server", q ? "Not in your library" : "Your library is empty", q ? "Nothing on your server matches. Switch the filter off to search everything." : "WAYL hasn't indexed your server yet. Check Settings → Music servers."),
+                more && h("div", { class: "section" }, more)
+            );
+        }
 
         async function idle() {
             const chips = h(
@@ -826,6 +1110,7 @@
             const q = input.value.trim();
             setQuery({ q });
             const mine = ++seq;
+            if (libraryOnly) return runLibrary(q, mine);
             if (q.length < 2) return idle();
             clear(results, skeleton(6));
 
@@ -895,14 +1180,15 @@
             h(
                 "div",
                 { class: "hero-body" },
-                h("span", { class: "eyebrow" }, "Song"),
+                h("span", { class: "eyebrow" }, "Song", song.owned ? h("span", { class: "chip chip-ok" }, icon("server"), "In your library") : null),
                 h("h1", {}, song.title),
                 h("div", { class: "by" }, song.artist_id ? h("a", { href: `/artist/${song.artist_id}` }, song.artist) : song.artist),
                 h("div", { class: "dot-list" }, song.album && h("span", {}, song.album), year && h("span", {}, year), song.duration && h("span", {}, duration(song.duration))),
                 h(
                     "div",
                     { class: "actions" },
-                    h("button", { type: "button", class: "btn btn-primary", onclick: async () => {
+                    canPlay(song) && h("button", { type: "button", class: "btn btn-primary", onclick: () => playQueue([song], 0) }, icon("play"), "Play"),
+                    h("button", { type: "button", class: canPlay(song) ? "btn" : "btn btn-primary", onclick: async () => {
                         const res = await logListen(song);
                         // a repeat within 30 seconds isn't counted twice
                         if (res && res.created) {
@@ -1059,8 +1345,10 @@
                 h(
                     "div",
                     { class: "feed-song" },
-                    cover(song.cover),
-                    h("div", { class: "row-main" }, h("a", { class: "row-title", href: `/song/${song.id}` }, song.title), h("span", { class: "row-sub" }, song.artist)),
+                    canPlay(song)
+                        ? h("button", { type: "button", class: "cover-btn", "aria-label": `Play “${song.title}”`, onclick: () => playQueue([song], 0) }, cover(song.cover), h("span", { class: "cover-play" }, icon("play")))
+                        : cover(song.cover),
+                    h("div", { class: "row-main" }, h("div", { class: "row-title-line" }, h("a", { class: "row-title", href: `/song/${song.id}` }, song.title), ownedBadge(song)), h("span", { class: "row-sub" }, song.artist)),
                     saveButton(song),
                     h("button", { type: "button", class: "icon-btn", title: "I'm listening to this too", "aria-label": `Log a listen of “${song.title}”`, onclick: () => logListen(song) }, icon("headphones"))
                 )
@@ -1297,7 +1585,8 @@
                     { class: "hero-body" },
                     eyebrow,
                     title,
-                    h("div", { class: "dot-list" }, h("a", { href: p.is_owner ? "/profile" : `/user/${p.owner.id}` }, p.owner.username), countLine, totalSecs > 0 && h("span", {}, `${Math.round(totalSecs / 60)} min`)),
+                    h("div", { class: "dot-list" }, h("a", { href: p.is_owner ? "/profile" : `/user/${p.owner.id}` }, p.owner.username), countLine, totalSecs > 0 && h("span", {}, `${Math.round(totalSecs / 60)} min`), p.synced_from && h("span", {}, `Synced from ${serverLabel(p.synced_from)}`)),
+                    p.songs.some(canPlay) && h("div", { class: "actions" }, h("button", { type: "button", class: "btn btn-primary", onclick: () => playQueue(p.songs, 0) }, icon("play"), "Play all")),
                     ownerTools
                 )
             ),
@@ -1440,6 +1729,19 @@
             }
         }
 
+        clear(
+            main,
+            profileHero(me, {
+                isMe: true,
+                extra: h("div", { class: "actions" }, h("a", { class: "btn btn-sm", href: "/settings" }, icon("sliders"), "Edit profile & settings")),
+            }),
+            h("div", { class: "section" }, h("h2", { class: "section-title" }, "Your stats", range), statsBody)
+        );
+        loadStats();
+    }
+
+    /** Account cards for the settings page: profile, password, sign out, delete. */
+    function accountCards(me) {
         // edit profile
         const username = h("input", { class: "input", name: "username", value: me.username, required: true, minlength: "2", maxlength: "30", pattern: "[A-Za-z0-9_.]{2,30}", autocomplete: "username" });
         const bio = h("textarea", { class: "input", name: "bio", maxlength: "160", rows: "2", placeholder: "A few words about your taste in music" });
@@ -1457,7 +1759,6 @@
                 const res = await api("/api/me", { method: "PATCH", body: { username: username.value.trim(), bio: bio.value } });
                 state.me = { ...state.me, ...res };
                 toast("Profile saved");
-                render();
             } catch (err) {
                 toast(err.message, "error");
             }
@@ -1479,36 +1780,24 @@
             }
         });
 
-        clear(
-            main,
-            profileHero(me, {
-                isMe: true,
-                extra: h("p", { class: "muted small" }, me.email, " · only you can see your email"),
-            }),
-            h("div", { class: "section" }, h("h2", { class: "section-title" }, "Your stats", range), statsBody),
+        return [
+            h("div", { class: "card" }, h("h3", {}, "Edit profile"), h("p", { class: "muted" }, "Your username and bio are visible to everyone on WAYL."), profileForm),
+            h("div", { class: "card" }, h("h3", {}, "Password"), h("p", { class: "muted" }, "Changing it signs you out on every other device."), pwForm),
             h(
                 "div",
-                { class: "section" },
-                h("h2", { class: "section-title" }, "Account"),
-                h("div", { class: "card" }, h("h3", {}, "Edit profile"), h("p", { class: "muted" }, "Your username and bio are visible to everyone on WAYL."), profileForm),
-                h("div", { class: "card" }, h("h3", {}, "Password"), h("p", { class: "muted" }, "Changing it signs you out on every other device."), pwForm),
-                h(
-                    "div",
-                    { class: "card" },
-                    h("h3", {}, "Session"),
-                    h("p", { class: "muted" }, "Sign out of WAYL on this device."),
-                    h("button", { type: "button", class: "btn", onclick: signOut }, icon("logout"), "Sign out")
-                ),
-                h(
-                    "div",
-                    { class: "card" },
-                    h("h3", {}, "Delete account"),
-                    h("p", { class: "muted" }, "Permanently deletes your account, listens, saved songs and playlists. This can't be undone."),
-                    h("button", { type: "button", class: "btn btn-danger", onclick: deleteAccount }, icon("trash"), "Delete account")
-                )
-            )
-        );
-        loadStats();
+                { class: "card" },
+                h("h3", {}, "Session"),
+                h("p", { class: "muted" }, `Signed in as ${me.email}. Only you can see your email.`),
+                h("button", { type: "button", class: "btn", onclick: signOut }, icon("logout"), "Sign out")
+            ),
+            h(
+                "div",
+                { class: "card" },
+                h("h3", {}, "Delete account"),
+                h("p", { class: "muted" }, "Permanently deletes your account, listens, saved songs, playlists and server connections. This can't be undone."),
+                h("button", { type: "button", class: "btn btn-danger", onclick: deleteAccount }, icon("trash"), "Delete account")
+            ),
+        ];
     }
 
     async function signOut() {
@@ -1539,6 +1828,370 @@
         } catch (err) {
             toast(err.message, "error");
         }
+    }
+
+    // --- settings ------------------------------------------------------------------------------------
+
+    async function pageSettings({ alive }) {
+        clear(main, skeleton(4));
+        const [me, servers, token, unmatched] = await Promise.all([
+            api("/api/me"),
+            api("/api/servers"),
+            api("/api/me/listen-token"),
+            api("/api/me/unmatched"),
+        ]);
+        if (!alive()) return;
+        state.me = { ...state.me, ...me };
+
+        const serversBox = h("div", {});
+        const refresh = async () => {
+            const [fresh, meNow] = await Promise.all([api("/api/servers"), api("/auth/session")]);
+            state.me = meNow.user;
+            if (alive()) renderServers(fresh.items);
+        };
+
+        function renderServers(items) {
+            const byKind = Object.fromEntries(items.map((s) => [s.kind, s]));
+            clear(
+                serversBox,
+                byKind.plex ? serverCard(byKind.plex, refresh, token) : plexConnectCard(refresh),
+                byKind.navidrome ? serverCard(byKind.navidrome, refresh, token) : navidromeConnectCard(refresh)
+            );
+            // keep the status fresh while a sync runs
+            if (items.some((s) => s.syncing)) setTimeout(() => alive() && refresh(), 4000);
+        }
+        renderServers(servers.items);
+
+        clear(
+            main,
+            pageHead("Settings", "Connect your music server and manage your account."),
+            h(
+                "div",
+                { class: "section", id: "servers" },
+                h("h2", { class: "section-title" }, "Music servers"),
+                h("p", { class: "muted small section-lede" }, "Connect Plex or Navidrome to log what you play there, import your playlists, and stream your own music in WAYL."),
+                serversBox
+            ),
+            h("div", { class: "section" }, h("h2", { class: "section-title" }, "Scrobbling"), scrobbleCard(token)),
+            unmatchedSection(unmatched),
+            h("div", { class: "section" }, h("h2", { class: "section-title" }, "Account"), accountCards(me))
+        );
+    }
+
+    function ago(iso) {
+        return iso ? timeAgo(iso) : "never";
+    }
+
+    function serverCard(server, refresh, token) {
+        const label = serverLabel(server.kind);
+        const toggle = (key, text, hint) => {
+            const input = h("input", { type: "checkbox", role: "switch", checked: server[key] });
+            input.addEventListener("change", async () => {
+                try {
+                    await api(`/api/servers/${server.id}`, { method: "PATCH", body: { [key]: input.checked } });
+                    toast(input.checked ? `${text}: on` : `${text}: off`);
+                    refresh();
+                } catch (err) {
+                    input.checked = !input.checked;
+                    toast(err.message, "error");
+                }
+            });
+            return h("div", { class: "setting-row" }, h("div", {}, h("strong", {}, text), h("span", { class: "muted small" }, hint)), h("label", { class: "switch" }, input, h("span", { class: "visually-hidden" }, text)));
+        };
+        const status = [
+            `${fmtNumber.format(server.library_count)} tracks indexed`,
+            `library ${ago(server.last_library_sync_at)}`,
+            server.sync_listens && `listens checked ${ago(server.last_listen_sync_at)}`,
+            server.sync_playlists && `${server.imported_playlists} playlists imported`,
+        ].filter(Boolean);
+
+        const syncBtn = h("button", { type: "button", class: "btn btn-sm", disabled: server.syncing, onclick: async () => {
+            syncBtn.disabled = true;
+            try {
+                await api(`/api/servers/${server.id}/sync`, { method: "POST" });
+                toast("Sync started");
+                refresh();
+            } catch (err) {
+                syncBtn.disabled = false;
+                toast(err.message, "error");
+            }
+        } }, icon("refresh"), server.syncing ? "Syncing…" : "Sync now");
+
+        const disconnect = h("button", { type: "button", class: "btn btn-sm btn-danger", onclick: async () => {
+            const ok = await confirmDialog({
+                title: `Disconnect ${label}?`,
+                text: "WAYL forgets this server's login and library. Your listens and imported playlists stay.",
+                confirm: "Disconnect",
+                danger: true,
+            });
+            if (!ok) return;
+            try {
+                await api(`/api/servers/${server.id}`, { method: "DELETE" });
+                toast(`${label} disconnected`);
+                refresh();
+            } catch (err) {
+                toast(err.message, "error");
+            }
+        } }, "Disconnect");
+
+        return h(
+            "div",
+            { class: "card server-card" },
+            h(
+                "div",
+                { class: "server-head" },
+                h("span", { class: `server-logo ${server.kind}`, "aria-hidden": "true" }, label[0]),
+                h(
+                    "div",
+                    { class: "row-main" },
+                    h("h3", {}, label, " ", h("span", { class: "chip chip-ok" }, icon("check"), "Connected")),
+                    h("span", { class: "muted small ellipsis" }, server.name !== label ? `${server.name} · ` : "", server.url, server.username ? ` · ${server.username}` : "")
+                )
+            ),
+            server.last_error && h("div", { class: "form-error", role: "alert" }, server.last_error),
+            h("p", { class: "muted small" }, server.syncing ? "Syncing now… " : "", status.join(" · ")),
+            toggle("sync_listens", "Log my listens", server.kind === "plex" ? "Imports your Plex play history every few minutes" : "Checks what you're playing every minute"),
+            toggle("sync_playlists", "Import playlists", "Mirrors your server's playlists in WAYL (they're re-synced, so edit them on the server)"),
+            server.kind === "navidrome" ? navidromeScrobbleHelp(token) : null,
+            h("div", { class: "actions" }, syncBtn, disconnect)
+        );
+    }
+
+    function navidromeScrobbleHelp(token) {
+        return h(
+            "details",
+            { class: "help" },
+            h("summary", {}, "Instant scrobbling (recommended)"),
+            h(
+                "ol",
+                {},
+                h("li", {}, "In Navidrome's configuration, set ", h("code", {}, `ND_LISTENBRAINZ_BASEURL=${token.api_url}`), " and restart it. (This sends everyone's ListenBrainz scrobbles on that Navidrome to WAYL.)"),
+                h("li", {}, "Create a scrobble token below, under Scrobbling."),
+                h("li", {}, "In Navidrome, open Personal settings, turn on ", h("strong", {}, "Scrobble to ListenBrainz"), " and paste the token.")
+            ),
+            h("p", { class: "muted small" }, "Without this, WAYL still logs what you play by checking Navidrome every minute, but very short tracks can slip through.")
+        );
+    }
+
+    function plexConnectCard(refresh) {
+        const manual = h("form", { class: "form", hidden: true },
+            field("Server address", h("input", { class: "input", name: "url", placeholder: "http://192.168.1.10:32400", required: true })),
+            field("Plex token", h("input", { class: "input", name: "token", required: true, autocomplete: "off" }), h("a", { class: "link small", href: "https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/", target: "_blank", rel: "noopener" }, "Where do I find it?")),
+            h("label", { class: "switch" }, h("input", { type: "checkbox", name: "owned", checked: true }), "I own this server (only my own plays get imported)"),
+            h("div", {}, h("button", { type: "submit", class: "btn btn-primary" }, "Connect"))
+        );
+        manual.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const data = new FormData(manual);
+            const btn = manual.querySelector("[type=submit]");
+            busy(btn, true, "Connecting…");
+            try {
+                await api("/api/servers", { method: "POST", body: { kind: "plex", url: data.get("url"), token: data.get("token"), owned: data.get("owned") === "on" } });
+                toast("Plex connected. Indexing your library…");
+                refresh();
+            } catch (err) {
+                toast(err.message, "error");
+            } finally {
+                busy(btn, false);
+            }
+        });
+        const signIn = h("button", { type: "button", class: "btn btn-primary", onclick: () => plexSignIn(refresh) }, "Sign in with Plex");
+        return h(
+            "div",
+            { class: "card server-card" },
+            h("div", { class: "server-head" }, h("span", { class: "server-logo plex", "aria-hidden": "true" }, "P"), h("div", { class: "row-main" }, h("h3", {}, "Plex"), h("span", { class: "muted small" }, "Sign in with your Plex account, then pick a server."))),
+            h("div", { class: "actions" }, signIn, h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: () => (manual.hidden = !manual.hidden) }, "Enter address and token instead")),
+            manual
+        );
+    }
+
+    async function plexSignIn(refresh) {
+        // Open the window right away (inside the click), or popup blockers step in.
+        const popup = window.open("", "plex-auth", "width=600,height=720");
+        let pin;
+        try {
+            pin = await api("/api/servers/plex/pin", { method: "POST" });
+        } catch (err) {
+            if (popup) popup.close();
+            return toast(err.message, "error");
+        }
+        if (popup) popup.location.href = pin.auth_url;
+        else window.open(pin.auth_url, "_blank", "noopener");
+
+        const status = h("p", { class: "muted" }, "Approve WAYL in the Plex window. This page will continue by itself.");
+        openDialog(h("h2", {}, "Sign in with Plex"), status, h("div", { class: "dialog-actions" }, h("button", { type: "button", class: "btn btn-ghost", onclick: () => dialog.close() }, "Cancel")));
+
+        const deadline = Date.now() + 5 * 60 * 1000;
+        while (dialog.open && Date.now() < deadline) {
+            await new Promise((r) => setTimeout(r, 2000));
+            let res;
+            try {
+                res = await api(`/api/servers/plex/pin/${pin.pin_id}`);
+            } catch (err) {
+                status.textContent = err.message;
+                return;
+            }
+            if (res.status !== "ready") continue;
+            if (popup && !popup.closed) popup.close();
+            if (!res.servers.length) {
+                status.textContent = "This Plex account has no servers WAYL can use.";
+                return;
+            }
+            return pickPlexServer(res.servers, refresh);
+        }
+        if (dialog.open) status.textContent = "Timed out. Try again.";
+    }
+
+    function pickPlexServer(servers, refresh) {
+        const list = h(
+            "ul",
+            { class: "pick-list" },
+            servers.map((s) =>
+                h(
+                    "li",
+                    {},
+                    h("button", { type: "button", onclick: async (e) => {
+                        const btn = e.currentTarget;
+                        btn.disabled = true;
+                        clear(note, "Finding a way to reach this server…");
+                        try {
+                            await api("/api/servers", { method: "POST", body: { kind: "plex", server: s.id } });
+                            dialog.close();
+                            toast(`${s.name} connected. Indexing your library…`);
+                            refresh();
+                        } catch (err) {
+                            btn.disabled = false;
+                            clear(note, h("span", { class: "form-error" }, err.message));
+                        }
+                    } },
+                    h("span", { class: "server-logo plex" }, "P"),
+                    h("span", { class: "row-main" }, h("span", { class: "row-title" }, s.name), h("span", { class: "row-sub" }, s.owned ? "Your server" : "Shared with you")))
+                )
+            )
+        );
+        const note = h("p", { class: "muted small" });
+        openDialog(h("h2", {}, "Choose a Plex server"), list, note);
+    }
+
+    function navidromeConnectCard(refresh) {
+        const form = h(
+            "form",
+            { class: "form" },
+            field("Server address", h("input", { class: "input", name: "url", placeholder: "http://192.168.1.10:4533", required: true }), h("span", { class: "hint" }, "As WAYL's server can reach it")),
+            h("div", { class: "two-col" },
+                field("Username", h("input", { class: "input", name: "username", required: true, autocomplete: "off" })),
+                pwField("Password", { name: "password", autocomplete: "off" })),
+            h("div", {}, h("button", { type: "submit", class: "btn btn-primary" }, "Connect Navidrome"))
+        );
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const data = new FormData(form);
+            const btn = form.querySelector("[type=submit]");
+            busy(btn, true, "Connecting…");
+            try {
+                await api("/api/servers", { method: "POST", body: { kind: "navidrome", url: data.get("url"), username: data.get("username"), password: data.get("password") } });
+                toast("Navidrome connected. Indexing your library…");
+                refresh();
+            } catch (err) {
+                toast(err.message, "error");
+            } finally {
+                busy(btn, false);
+            }
+        });
+        return h(
+            "div",
+            { class: "card server-card" },
+            h("div", { class: "server-head" }, h("span", { class: "server-logo navidrome", "aria-hidden": "true" }, "N"), h("div", { class: "row-main" }, h("h3", {}, "Navidrome"), h("span", { class: "muted small" }, "Or any Subsonic-compatible server. Your password is stored encrypted."))),
+            form
+        );
+    }
+
+    function scrobbleCard(token) {
+        const body = h("div", { class: "form" });
+        const card = h(
+            "div",
+            { class: "card" },
+            h("h3", {}, "Scrobble token"),
+            h("p", { class: "muted" }, "WAYL speaks the ListenBrainz scrobbling API, so any player that lets you change the ListenBrainz server can log listens here."),
+            body
+        );
+        const paint = (t, fresh) => {
+            clear(
+                body,
+                field("API URL", copyable(t.api_url)),
+                fresh
+                    ? h("div", {}, field("Your token", copyable(fresh)), h("p", { class: "form-success small" }, "Copy it now: it won't be shown again."))
+                    : h("p", { class: "muted small" }, t.exists ? `Token created ${ago(t.created_at)}, last used ${ago(t.last_used_at)}.` : "No token yet."),
+                h(
+                    "div",
+                    { class: "actions" },
+                    h("button", { type: "button", class: "btn btn-sm", onclick: async () => {
+                        if (t.exists && !(await confirmDialog({ title: "Replace the token?", text: "Players using the old one will stop scrobbling until you paste the new one.", confirm: "Replace" }))) return;
+                        const res = await api("/api/me/listen-token", { method: "POST" });
+                        paint({ ...t, exists: true, created_at: new Date().toISOString(), last_used_at: null }, res.token);
+                    } }, icon("key"), t.exists ? "Replace token" : "Create token"),
+                    t.exists && h("button", { type: "button", class: "btn btn-sm btn-ghost", onclick: async () => {
+                        await api("/api/me/listen-token", { method: "DELETE" });
+                        paint({ ...t, exists: false }, null);
+                        toast("Token revoked");
+                    } }, "Revoke")
+                )
+            );
+        };
+        paint(token, null);
+        return card;
+    }
+
+    function copyable(text) {
+        const input = h("input", { class: "input mono", value: text, readonly: true });
+        const btn = h("button", { type: "button", class: "icon-btn", "aria-label": "Copy", title: "Copy", onclick: async () => {
+            try {
+                await navigator.clipboard.writeText(text);
+                toast("Copied");
+            } catch {
+                input.select();
+            }
+        } }, icon("copy"));
+        return h("div", { class: "input-group" }, input, btn);
+    }
+
+    function unmatchedSection(data) {
+        const box = h("div", { class: "section", hidden: !data.unmatched && !data.pending });
+        const paint = (d) => {
+            box.hidden = !d.unmatched && !d.pending;
+            clear(
+                box,
+                h("h2", { class: "section-title" }, "Listens WAYL couldn't match"),
+                h(
+                    "div",
+                    { class: "card" },
+                    h("p", { class: "muted" }, `${d.unmatched} unmatched${d.pending ? `, ${d.pending} waiting to be matched` : ""}. These tracks weren't found in MusicBrainz, so they're not in your history yet. Fixing their tags on your server usually helps.`),
+                    h("ul", { class: "list compact" }, d.items.filter((i) => i.status === "unmatched").slice(0, 10).map((i) =>
+                        h("li", { class: "row" }, h("div", { class: "row-main" }, h("span", { class: "row-title" }, i.title), h("span", { class: "row-sub" }, `${i.artist}${i.album ? " · " + i.album : ""} · ${serverLabel(i.source) === "your server" ? i.source : serverLabel(i.source)} · ${timeAgo(i.listened_at)}`)))
+                    )),
+                    h(
+                        "div",
+                        { class: "actions" },
+                        h("button", { type: "button", class: "btn btn-sm", onclick: async (e) => {
+                            busy(e.currentTarget, true, "Matching…");
+                            try {
+                                const res = await api("/api/me/unmatched", { method: "POST" });
+                                toast(`${res.added} added to your history`);
+                                paint(await api("/api/me/unmatched"));
+                            } catch (err) {
+                                toast(err.message, "error");
+                            }
+                        } }, icon("refresh"), "Try again"),
+                        h("button", { type: "button", class: "btn btn-sm btn-ghost", onclick: async () => {
+                            await api("/api/me/unmatched", { method: "DELETE" });
+                            paint(await api("/api/me/unmatched"));
+                        } }, "Dismiss all")
+                    )
+                )
+            );
+        };
+        paint(data);
+        return box;
     }
 
     // --- someone else's profile ------------------------------------------------------------------------
@@ -1605,7 +2258,13 @@
     // --- boot -------------------------------------------------------------------------------------------
 
     async function boot() {
+        // The Plex sign-in popup lands back here when done: the main window takes over.
+        if (window.opener && new URLSearchParams(location.search).get("plex") === "done") {
+            window.close();
+            return;
+        }
         buildNav();
+        buildPlayer();
         try {
             state.me = (await api("/auth/session")).user;
         } catch {

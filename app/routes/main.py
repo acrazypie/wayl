@@ -11,6 +11,7 @@ PAGES = [
     "/playlists/<int:playlist_id>",
     "/songs",
     "/profile",
+    "/settings",
     "/song/<string:song_id>",
     "/artist/<string:artist_id>",
     "/user/<int:user_id>",

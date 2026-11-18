@@ -23,6 +23,18 @@ from app.api.music import (
     SongSearch,
     Stats,
 )
+from app.api.servers import (
+    LibrarySearch,
+    LibraryTrackMatch,
+    ListenTokenResource,
+    PlexPin,
+    PlexPinCheck,
+    ServerDetail,
+    ServerList,
+    ServerSync,
+    SongSources,
+    UnmatchedListens,
+)
 from app.api.user import (
     ChangePassword,
     FollowList,
@@ -66,6 +78,17 @@ def register_routes(app):
     api.add_resource(SongDetail, "/api/songs/<string:song_id>")
     api.add_resource(ArtistSearch, "/api/artists")
     api.add_resource(ArtistDetail, "/api/artists/<string:artist_id>")
+
+    api.add_resource(ServerList, "/api/servers")
+    api.add_resource(PlexPin, "/api/servers/plex/pin")
+    api.add_resource(PlexPinCheck, "/api/servers/plex/pin/<int:pin_id>")
+    api.add_resource(ServerDetail, "/api/servers/<int:server_id>")
+    api.add_resource(ServerSync, "/api/servers/<int:server_id>/sync")
+    api.add_resource(LibrarySearch, "/api/library")
+    api.add_resource(LibraryTrackMatch, "/api/library/tracks/<int:track_id>/match")
+    api.add_resource(SongSources, "/api/songs/<string:song_id>/sources")
+    api.add_resource(ListenTokenResource, "/api/me/listen-token")
+    api.add_resource(UnmatchedListens, "/api/me/unmatched")
 
     api.add_resource(PlaylistList, "/api/playlists")
     api.add_resource(PlaylistDetail, "/api/playlists/<int:playlist_id>")

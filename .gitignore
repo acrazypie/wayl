@@ -1,5 +1,28 @@
-.venv
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Secrets and local config (keep the example)
 .env
-**__pycache__**
-database.db
+.env.*
+!.env.example
+secret_key
+
+# Databases (SQLite also writes -wal / -shm files next to the database)
 instance/
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store

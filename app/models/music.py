@@ -97,4 +97,6 @@ class ListeningHistory(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     song_id = db.Column(db.Integer, db.ForeignKey("songs.id"), nullable=False)
     listened_at = db.Column(db.DateTime, default=utcnow)  # callable, evaluated per row
+    # Where it came from: None (logged by hand), "player", "plex", "navidrome", "scrobbler"
+    source = db.Column(db.String(30), nullable=True)
     song = db.relationship("Song")

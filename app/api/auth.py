@@ -60,8 +60,15 @@ def validate_password(password):
 def me_dict(user):
     """The signed-in user's own view of their account (includes email)."""
     from app.api.user import public_user
+    from app.models.server import MediaServer
 
-    return {**public_user(user), "email": user.email}
+    servers = MediaServer.query.filter_by(user_id=user.id).all()
+    return {
+        **public_user(user),
+        "email": user.email,
+        "has_servers": bool(servers),
+        "servers": [{"id": s.id, "kind": s.kind, "name": s.name} for s in servers],
+    }
 
 
 def start_session(user, remember=True):

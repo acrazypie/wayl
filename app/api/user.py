@@ -82,6 +82,13 @@ class Me(Resource):
         )
         ListeningHistory.query.filter_by(user_id=uid).delete(synchronize_session=False)
         SavedSong.query.filter_by(user_id=uid).delete(synchronize_session=False)
+        from app.models.server import IncomingListen, ListenToken, MediaServer
+
+        IncomingListen.query.filter_by(user_id=uid).delete(synchronize_session=False)
+        ListenToken.query.filter_by(user_id=uid).delete(synchronize_session=False)
+        for server in MediaServer.query.filter_by(user_id=uid).all():
+            db.session.delete(server)  # cascades to its tracks and playlist links
+        db.session.flush()
         for playlist in Playlist.query.filter_by(user_id=uid).all():
             db.session.delete(playlist)
         db.session.delete(user)
