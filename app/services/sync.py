@@ -238,10 +238,13 @@ def process_pending(limit=100, user_id=None, include_unmatched=False):
 
 
 def run_round():
-    """One worker round: every server's due jobs, then queued listens."""
+    """One worker round: every server's due jobs, queued listens, then stale share subscriptions."""
+    from app.services.subscriptions import refresh_due
+
     for (server_id,) in db.session.query(MediaServer.id).all():
         server = db.session.get(MediaServer, server_id)
         jobs = due_jobs(server)
         if jobs:
             sync_server(server_id, jobs)
     process_pending()
+    refresh_due()

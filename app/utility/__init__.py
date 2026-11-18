@@ -83,11 +83,23 @@ class Config:
     PLEX_HISTORY_INTERVAL = int(os.getenv("PLEX_HISTORY_INTERVAL", "300"))
     PLAYLIST_SYNC_INTERVAL = int(os.getenv("PLAYLIST_SYNC_INTERVAL", str(6 * 3600)))
 
+    # Follows + feed between users of this instance. Off by default: WAYL is a personal log first.
+    SOCIAL_ENABLED = _flag("WAYL_SOCIAL", "0")
+    # How often subscribed share links from other instances are re-fetched (with backoff on errors).
+    SHARE_REFRESH_HOURS = float(os.getenv("SHARE_REFRESH_HOURS", "6"))
+
     RATELIMIT_ENABLED = _flag("RATELIMIT_ENABLED", "1")
     RATELIMIT_STORAGE_URI = os.getenv("RATELIMIT_STORAGE_URI", "memory://")
 
 
 config = Config()
+
+
+def social_enabled():
+    """Whether social features are on for the running app (create_app can override the env)."""
+    from flask import current_app
+
+    return bool(current_app.config.get("SOCIAL_ENABLED"))
 
 limiter = Limiter(key_func=get_remote_address, storage_uri=config.RATELIMIT_STORAGE_URI)
 

@@ -14,7 +14,6 @@ from app.models.music import (
     SavedSong,
     Song,
 )
-from app.models.user import Follow
 from app.services import catalog
 from app.utility import auth_required, get_current_user, int_arg, iso, json_body
 
@@ -297,7 +296,7 @@ class PlaylistList(Resource):
     @auth_required
     def get(self):
         playlists = Playlist.query.filter_by(user_id=g.current_user.id).order_by(Playlist.id.desc()).all()
-        return {"items": [playlist_dict(p) for p in playlists]}
+        return {"items": [{**playlist_dict(p), "shared": p.share_token is not None} for p in playlists]}
 
     @auth_required
     def post(self):
@@ -320,6 +319,10 @@ class PlaylistDetail(Resource):
         data = playlist_dict(playlist, with_songs=True)
         data["songs"] = with_saved(user, data["songs"])
         data["is_owner"] = bool(user and user.id == playlist.user_id)
+        if data["is_owner"]:
+            from app.api.sharing import playlist_share_info
+
+            data["share"] = playlist_share_info(playlist)
         return data
 
     @auth_required
@@ -441,22 +444,6 @@ class HistoryList(Resource):
             db.session.commit()
             return None, ({"error": "This track isn't in MusicBrainz, so it can't be logged"}, 404)
         return song, None
-
-
-class FeedList(Resource):
-    """What the people you follow have been listening to."""
-
-    @auth_required
-    def get(self):
-        limit = int_arg("limit", 30, 1, 100)
-        followed = db.session.query(Follow.followed_id).filter(Follow.follower_id == g.current_user.id)
-        entries = (
-            ListeningHistory.query.filter(ListeningHistory.user_id.in_(followed))
-            .order_by(desc(ListeningHistory.listened_at), desc(ListeningHistory.id))
-            .limit(limit)
-            .all()
-        )
-        return {"items": listens_for(g.current_user, entries, with_user=True)}
 
 
 class Stats(Resource):

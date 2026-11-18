@@ -17,6 +17,15 @@
   the sync loop), `app/api/listenbrainz.py` (ListenBrainz-compatible scrobble API),
   `app/routes/stream.py` (audio proxy). Server logins are encrypted with `secrets_box` and must
   never be returned by the API or sent to the browser; other users' servers/tracks must 404.
+- **Core vs social:** WAYL is a personal log first. Follows/feed live in `app/api/social.py` +
+  `app/models/social.py` and are registered only with `WAYL_SOCIAL=1` (`social_enabled()`); core
+  code imports social code only inside functions guarded by that check. Use `create_app()`
+  (tests build one per test; `@pytest.mark.social` turns social on).
+- **Sharing between instances:** publishing in `app/services/share_docs.py` (documents) +
+  `app/routes/share.py` (`/share/v1/...`) + `app/api/sharing.py` (owner endpoints); subscribing in
+  `app/services/remote_share.py` (the one `fetch()`; tests replace `_http_get`) +
+  `app/services/subscriptions.py` + `app/api/subscriptions.py`. Protocol:
+  `docs/sharing-protocol.md`. API reference: `docs/api.md` (every route is also under `/api/v1`).
 
 ## Rules (don't break these)
 
@@ -32,6 +41,10 @@
    through `iso()`.
 6. Every new endpoint or behavior gets a test in `tests/`. Never commit `.env` or `database.db`.
 7. Don't add a dependency without adding it to `requirements.txt`.
+8. **Share documents never contain private fields or media-server data** (no email, ids, server
+   names/URLs, library track ids, listen sources). Build them only in `share_docs.py`, from an
+   allow-list. **Remote share data is untrusted input:** fetch only through `remote_share.fetch()`
+   and use only what `parse_document()` returns; never use it to overwrite shared catalog data.
 
 ## Phase 0: baseline
 
@@ -77,12 +90,15 @@
 
 ## Phase 4: sharing (what makes people tell friends)
 
-- [ ] Public profile page `/u/<username>`: top artists, recent public listens, follow button.
-- [ ] Public playlist page `/p/<id>` for `is_public` playlists (+ Open Graph tags for link previews),
-      and a share toggle in the Playlists tab.
+- [x] ~~Public profile page `/u/<username>`~~ → replaced by revocable profile share links
+      (`/share/v1/u/<token>`, opt-in listens/top artists) that other instances subscribe to.
+- [x] ~~Public playlist page `/p/<id>`~~ → playlist share links (`/share/v1/p/<token>`, JSON + JSPF)
+      with a share toggle on the playlist page, and a Friends page to subscribe to them.
+- [ ] Human-readable HTML page (+ Open Graph tags) for share links, so they preview nicely in chats.
 - [ ] **"Wrapped"-style recap:** a shareable card (HTML page or generated PNG) of top songs/artists
       for a chosen period, built on `/api/stats`.
-- [ ] Optional weekly digest email of friends' top listens (opt-in, with an unsubscribe link).
+- [ ] Optional weekly digest email of friends' top listens (opt-in, with an unsubscribe link);
+      needs `WAYL_SOCIAL` or would be built on subscriptions.
 
 ## Phase 5: polish and ship
 

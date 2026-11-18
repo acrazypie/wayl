@@ -64,6 +64,8 @@
         refresh: ["M21 12a9 9 0 1 1-3-6.7L21 8", "M21 3v5h-5"],
         key: ["c:7.5,15.5,5.5", "m21 2-9.6 9.6", "m15.5 7.5 3 3L22 7l-3-3"],
         copy: ["r:9,9,13,13,2", "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"],
+        share: ["c:18,5,3", "c:6,12,3", "c:18,19,3", "m8.6 13.5 6.8 4", "m15.4 6.5-6.8 4"],
+        arrowLeft: ["m12 19-7-7 7-7", "M19 12H5"],
     };
 
     function icon(name, label) {
@@ -101,7 +103,7 @@
 
     // --- state & API ------------------------------------------------------------------
 
-    const state = { me: null, playlists: null };
+    const state = { me: null, playlists: null, instance: null };
 
     /** Per-browser preferences (e.g. the search filter). Storage can be unavailable: ignore. */
     const prefs = {
@@ -222,7 +224,7 @@
     function cover(url, cls = "") {
         const box = h("span", { class: `cover ${cls}`, "aria-hidden": "true" }, icon("music"));
         if (isHttpUrl(url)) {
-            const img = h("img", { src: url, alt: "", loading: "lazy", decoding: "async" });
+            const img = h("img", { src: url, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer" });
             // Fade in once loaded; until then (or if there's no cover) the gradient shows.
             img.addEventListener("load", () => img.classList.add("loaded"), { once: true });
             img.addEventListener("error", () => img.remove(), { once: true });
@@ -237,7 +239,7 @@
         if (!urls.length) box.append(icon("playlist"));
         else
             for (const url of urls.length >= 4 ? urls.slice(0, 4) : urls.slice(0, 1)) {
-                const img = h("img", { src: url, alt: "", loading: "lazy" });
+                const img = h("img", { src: url, alt: "", loading: "lazy", referrerpolicy: "no-referrer" });
                 img.addEventListener("load", () => img.classList.add("loaded"), { once: true });
                 box.append(img);
             }
@@ -448,7 +450,12 @@
             "li",
             { class: "row" + (player.current && player.current === song ? " is-playing" : "") },
             h("div", { class: "row-lead" }, opts.index ? h("span", { class: "row-index" }, opts.index) : null, lead),
-            h("div", { class: "row-main" }, h("div", { class: "row-title-line" }, title, ownedBadge(song)), h("span", { class: "row-sub" }, sub)),
+            h(
+                "div",
+                { class: "row-main" },
+                h("div", { class: "row-title-line" }, title, ownedBadge(song), opts.showMissing && song.owned === false && h("span", { class: "chip chip-missing" }, "Not in your library")),
+                h("span", { class: "row-sub" }, sub)
+            ),
             actions
         );
     }
@@ -730,13 +737,19 @@
 
     // --- router --------------------------------------------------------------------------------
 
+    /** Social features (follows, feed) are optional per instance: see /api/instance. */
+    const social = () => !!(state.instance && state.instance.features && state.instance.features.social);
+
+    // [path, label, icon, needs social]
     const NAV = [
         ["/search", "Search", "search"],
-        ["/following", "Following", "users"],
+        ["/friends", "Friends", "share"],
+        ["/following", "Following", "users", true],
         ["/playlists", "Playlists", "playlist"],
         ["/songs", "My songs", "music"],
         ["/profile", "Profile", "user"],
     ];
+    const navItems = () => NAV.filter((item) => !item[3] || social());
 
     const routes = [
         [/^\/$/, () => go(state.me ? "/search" : "/login", true)],
@@ -745,12 +758,14 @@
         [/^\/forgot$/, pageForgot, "guest"],
         [/^\/reset$/, pageReset, "any"],
         [/^\/search$/, pageSearch],
-        [/^\/following$/, pageFollowing],
+        [/^\/following$/, pageFollowing, undefined, "social"],
         [/^\/playlists$/, pagePlaylists],
         [/^\/playlists\/(\d+)$/, pagePlaylist],
         [/^\/songs$/, pageMySongs],
         [/^\/profile$/, pageProfile],
         [/^\/settings$/, pageSettings],
+        [/^\/friends$/, pageFriends],
+        [/^\/friends\/(\d+)$/, pageSubscription],
         [/^\/song\/([0-9a-f-]{36})$/, pageSong],
         [/^\/artist\/([0-9a-f-]{36})$/, pageArtist],
         [/^\/user\/(\d+)$/, pageUser],
@@ -775,8 +790,8 @@
 
     function buildNav() {
         const link = ([href, label, ic]) => h("a", { href }, icon(ic), h("span", {}, label));
-        clear($("#nav"), NAV.map(link), h("hr", { class: "nav-sep" }), link(["/settings", "Settings", "sliders"]));
-        clear($("#tabbar"), NAV.map(link));
+        clear($("#nav"), navItems().map(link), h("hr", { class: "nav-sep" }), link(["/settings", "Settings", "sliders"]));
+        clear($("#tabbar"), navItems().map(link));
         clear($("#mobile-actions"), h("a", { href: "/settings", class: "icon-btn", "aria-label": "Settings" }, icon("sliders")));
     }
 
@@ -792,7 +807,8 @@
     function render() {
         const path = location.pathname;
         const params = new URLSearchParams(location.search);
-        const match = routes.find(([re]) => re.test(path));
+        // routes marked "social" only exist when the instance has social features on
+        const match = routes.find(([re, , , needs]) => re.test(path) && (needs !== "social" || social()));
         if (!match) {
             appEl.dataset.state = "user";
             clear(main, empty("disc", "Page not found", "That page doesn't exist.", h("a", { class: "btn", href: "/search" }, "Go to search")));
@@ -840,7 +856,13 @@
                     "section",
                     { class: "auth-art", "aria-hidden": "true" },
                     h("h2", {}, "What are you listening to?"),
-                    h("p", {}, "Log the songs you love, build playlists, and see what your friends are playing right now.")
+                    h(
+                        "p",
+                        {},
+                        social()
+                            ? "Log the songs you love, build playlists, and see what your friends are playing right now."
+                            : "Your own music log: track what you listen to, build playlists, and stream your library from your own server."
+                    )
                 ),
                 h(
                     "section",
@@ -1543,8 +1565,9 @@
             ownerTools = h(
                 "div",
                 { class: "actions" },
-                h("label", { class: "switch" }, toggle, "Public"),
+                h("label", { class: "switch", title: "Visible to people signed in to this WAYL" }, toggle, "Public"),
                 copyBtn,
+                shareControls(p),
                 h("button", { type: "button", class: "btn btn-sm btn-ghost", onclick: async () => {
                     const name = window.prompt("Rename playlist", p.name);
                     if (!name || !name.trim() || name === p.name) return;
@@ -1674,8 +1697,9 @@
                 h(
                     "div",
                     { class: "counts" },
-                    h("span", {}, h("b", {}, user.followers), " followers"),
-                    h("span", {}, h("b", {}, user.following), " following"),
+                    // follower counts only exist when social features are on
+                    user.followers !== undefined && h("span", {}, h("b", { class: "followers-count" }, user.followers), " followers"),
+                    user.following !== undefined && h("span", {}, h("b", {}, user.following), " following"),
                     user.joined_at && h("span", {}, `Joined ${monthYear(user.joined_at)}`)
                 ),
                 extra
@@ -1814,7 +1838,7 @@
     async function deleteAccount() {
         const password = await confirmDialog({
             title: "Delete your account?",
-            text: "Everything will be deleted: listens, saved songs, playlists and followers. Enter your password to confirm.",
+            text: `Everything will be deleted: listens, saved songs, playlists${social() ? ", followers" : ""} and server connections. Enter your password to confirm.`,
             confirm: "Delete forever",
             danger: true,
             password: true,
@@ -1834,11 +1858,12 @@
 
     async function pageSettings({ alive }) {
         clear(main, skeleton(4));
-        const [me, servers, token, unmatched] = await Promise.all([
+        const [me, servers, token, unmatched, sharing] = await Promise.all([
             api("/api/me"),
             api("/api/servers"),
             api("/api/me/listen-token"),
             api("/api/me/unmatched"),
+            api("/api/me/sharing"),
         ]);
         if (!alive()) return;
         state.me = { ...state.me, ...me };
@@ -1864,7 +1889,7 @@
 
         clear(
             main,
-            pageHead("Settings", "Connect your music server and manage your account."),
+            pageHead("Settings", "Connect your music server, share with friends and manage your account."),
             h(
                 "div",
                 { class: "section", id: "servers" },
@@ -1873,6 +1898,7 @@
                 serversBox
             ),
             h("div", { class: "section" }, h("h2", { class: "section-title" }, "Scrobbling"), scrobbleCard(token)),
+            h("div", { class: "section", id: "sharing" }, h("h2", { class: "section-title" }, "Sharing"), sharingCard(sharing)),
             unmatchedSection(unmatched),
             h("div", { class: "section" }, h("h2", { class: "section-title" }, "Account"), accountCards(me))
         );
@@ -2194,6 +2220,290 @@
         return box;
     }
 
+    // --- sharing (publishing) ---------------------------------------------------------------------------
+
+    function warningBox(info) {
+        return info && info.warning ? h("div", { class: "form-error", role: "alert" }, info.warning) : null;
+    }
+
+    /** Owner controls on a playlist page: a read-only link anyone (on any WAYL) can open. */
+    function shareControls(p) {
+        const box = h("span", { class: "share-controls" });
+        const paint = (info) => {
+            p.share = info;
+            const toggle = h("input", { type: "checkbox", role: "switch", checked: info.shared });
+            toggle.addEventListener("change", async () => {
+                try {
+                    paint(await api(`/api/playlists/${p.id}/share`, { method: toggle.checked ? "PUT" : "DELETE" }));
+                    toast(toggle.checked ? "Share link on: anyone with the link can see this playlist" : "Share link off: the old link stops working");
+                } catch (err) {
+                    toggle.checked = !toggle.checked;
+                    toast(err.message, "error");
+                }
+            });
+            clear(
+                box,
+                h("label", { class: "switch", title: "A read-only link friends can open from their own WAYL" }, toggle, "Share link"),
+                info.shared && h("button", { type: "button", class: "btn btn-sm", onclick: () => copyText(info.url, "Share link copied") }, icon("copy"), "Copy share link"),
+                info.shared && h("button", { type: "button", class: "btn btn-sm btn-ghost", onclick: async () => {
+                    const ok = await confirmDialog({ title: "Reset the share link?", text: "The current link stops working. Friends who subscribed will need the new one.", confirm: "Reset" });
+                    if (ok) {
+                        paint(await api(`/api/playlists/${p.id}/share/reset`, { method: "POST" }));
+                        toast("New share link created");
+                    }
+                } }, "Reset link"),
+                info.shared && info.warning && h("span", { class: "chip chip-warn", title: info.warning }, "Not reachable by friends")
+            );
+        };
+        paint(p.share || { shared: false, url: null });
+        return box;
+    }
+
+    async function copyText(text, done = "Copied") {
+        try {
+            await navigator.clipboard.writeText(text);
+            toast(done);
+        } catch {
+            window.prompt("Copy this link:", text);
+        }
+    }
+
+    function sharingCard(info) {
+        const body = h("div", { class: "form" });
+        const card = h(
+            "div",
+            { class: "card" },
+            h("h3", {}, "Your profile link"),
+            h("p", { class: "muted" }, "A read-only page friends can subscribe to from their own WAYL: your name, the playlists you share, and only what you turn on below. Only song information is shared, never your music files or your server."),
+            body
+        );
+        const save = async (patch, message) => {
+            try {
+                paint(await api("/api/me/sharing", { method: "PATCH", body: patch }));
+                if (message) toast(message);
+            } catch (err) {
+                toast(err.message, "error");
+                paint(info);
+            }
+        };
+        const row = (key, text, hint) => {
+            const input = h("input", { type: "checkbox", role: "switch", checked: info[key] });
+            input.addEventListener("change", () => save({ [key]: input.checked }));
+            return h("div", { class: "setting-row" }, h("div", {}, h("strong", {}, text), h("span", { class: "muted small" }, hint)), h("label", { class: "switch" }, input, h("span", { class: "visually-hidden" }, text)));
+        };
+        function paint(next) {
+            info = next;
+            const name = h("input", { class: "input", name: "display_name", value: info.display_name, maxlength: "60" });
+            const nameForm = h("form", { class: "inline-form" }, name, h("button", { type: "submit", class: "btn" }, "Save name"));
+            nameForm.addEventListener("submit", (e) => {
+                e.preventDefault();
+                save({ display_name: name.value }, "Display name saved");
+            });
+            clear(
+                body,
+                warningBox(info),
+                row("enabled", "Share my profile", "Anyone with the link can see it"),
+                info.enabled && field("Profile link", copyable(info.url)),
+                info.enabled && h("div", { class: "actions" }, h("button", { type: "button", class: "btn btn-sm btn-ghost", onclick: async () => {
+                    const ok = await confirmDialog({ title: "Reset your profile link?", text: "The current link stops working right away.", confirm: "Reset" });
+                    if (ok) paint(await api("/api/me/sharing/reset", { method: "POST" }));
+                } }, "Reset link")),
+                row("share_listens", "Share my recent listens", "Your last 50 listens, visible to anyone with your profile link. Off by default."),
+                row("share_top_artists", "Share my top artists", "Your 10 most played artists of the last 30 days, visible to anyone with the link."),
+                field("Display name", nameForm, h("span", { class: "hint" }, "Shown to friends instead of your username")),
+                h("p", { class: "muted small" }, "To share a playlist, open it and turn on its share link.")
+            );
+        }
+        paint(info);
+        return card;
+    }
+
+    // --- friends (subscriptions to other people's share links) ----------------------------------------
+
+    const FRIENDS_IDEA = "Paste a link a friend shared from their WAYL to see their playlists and which songs you already have.";
+
+    async function pageFriends({ alive }) {
+        const input = h("input", { class: "input", type: "url", name: "url", placeholder: "https://their-wayl.example/share/v1/…", required: true, "aria-label": "Share link" });
+        const addBtn = h("button", { type: "submit", class: "btn btn-primary" }, icon("plus"), "Add");
+        const form = h("form", { class: "inline-form card" }, input, addBtn);
+        const list = h("div", { class: "section" }, skeleton(3));
+        clear(main, pageHead("Friends", FRIENDS_IDEA), form, list);
+
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            busy(addBtn, true, "Adding…");
+            try {
+                const sub = await api("/api/subscriptions", { method: "POST", body: { url: input.value.trim() } });
+                go(`/friends/${sub.id}`);
+            } catch (err) {
+                toast(err.message, "error");
+            } finally {
+                busy(addBtn, false);
+            }
+        });
+
+        const items = (await api("/api/subscriptions")).items;
+        if (!alive()) return;
+        clear(
+            list,
+            items.length
+                ? h("ul", { class: "list sub-list" }, items.map((sub) => subscriptionRow(sub, () => render())))
+                : empty("share", "No friends added yet", FRIENDS_IDEA + " You can share your own from Settings → Sharing.", h("a", { class: "btn", href: "/settings#sharing" }, icon("share"), "Share yours"))
+        );
+    }
+
+    function subscriptionRow(sub, onChange) {
+        const what = sub.kind === "profile" ? `${sub.count} shared ${sub.count === 1 ? "playlist" : "playlists"}` : `${sub.count} ${sub.count === 1 ? "song" : "songs"}`;
+        return h(
+            "li",
+            { class: "person" },
+            sub.kind === "profile" ? avatar(sub.title) : h("span", { class: "cover" }, icon("playlist")),
+            h(
+                "div",
+                { class: "row-main" },
+                h("div", { class: "row-title-line" }, h("a", { class: "row-title", href: `/friends/${sub.id}` }, sub.title), sub.last_error && h("span", { class: "chip chip-warn", title: sub.last_error }, "Can't update")),
+                h("span", { class: "row-sub" }, [sub.kind === "profile" ? "Profile" : `Playlist by ${sub.owner_name || "someone"}`, what, sub.updated_at && `updated ${timeAgo(sub.updated_at)}`].filter(Boolean).join(" · "))
+            ),
+            h("button", { type: "button", class: "icon-btn", title: "Check for updates", "aria-label": `Refresh ${sub.title}`, onclick: async (e) => {
+                e.currentTarget.disabled = true;
+                try {
+                    const res = await api(`/api/subscriptions/${sub.id}/refresh`, { method: "POST" });
+                    toast(res.last_error ? res.last_error : "Up to date", res.last_error ? "error" : "");
+                    onChange();
+                } catch (err) {
+                    toast(err.message, "error");
+                }
+            } }, icon("refresh")),
+            h("button", { type: "button", class: "icon-btn", title: "Remove", "aria-label": `Remove ${sub.title}`, onclick: async () => {
+                const ok = await confirmDialog({ title: `Remove “${sub.title}”?`, text: "You can add it again with the same link.", confirm: "Remove", danger: true });
+                if (!ok) return;
+                await api(`/api/subscriptions/${sub.id}`, { method: "DELETE" });
+                toast("Removed");
+                onChange();
+            } }, icon("trash"))
+        );
+    }
+
+    async function pageSubscription({ args: [id], alive }) {
+        clear(main, skeleton(5));
+        const sub = await api(`/api/subscriptions/${id}`);
+        if (!alive()) return;
+        document.title = `${sub.title} · WAYL`;
+        const back = h("a", { class: "btn btn-sm btn-ghost back-link", href: sub.parent_id ? `/friends/${sub.parent_id}` : "/friends" }, icon("arrowLeft"), sub.parent_id ? "Back to profile" : "Friends");
+        const stale = sub.last_error && h("div", { class: "form-error", role: "status" }, `Couldn't update this (${sub.last_error}). Showing the copy from ${timeAgo(sub.fetched_at)}.`);
+        if (sub.kind === "profile") return renderProfileSub(sub, back, stale, alive);
+
+        const tracks = sub.tracks;
+        const owned = tracks.filter((t) => t.owned);
+        const ownedLine =
+            sub.owned_count === null
+                ? h("span", {}, h("a", { class: "link", href: "/settings#servers" }, "Connect your server"), " to see which songs you own")
+                : h("span", {}, `You own ${sub.owned_count} of ${sub.total}`);
+        const coverBox = mosaic(tracks.map((t) => t.cover).filter(Boolean).slice(0, 4));
+        coverBox.classList.add("cover-lg");
+        const actions = h(
+            "div",
+            { class: "actions" },
+            owned.length && state.me.has_servers ? h("button", { type: "button", class: "btn btn-primary", onclick: () => playQueue(tracks, tracks.indexOf(owned[0])) }, icon("play"), "Play what you own") : null,
+            h("button", { type: "button", class: owned.length ? "btn" : "btn btn-primary", onclick: async (e) => {
+                busy(e.currentTarget, true, "Copying…");
+                try {
+                    const res = await api(`/api/subscriptions/${sub.id}/copy`, { method: "POST" });
+                    state.playlists = null;
+                    toast(res.skipped ? `${res.message} (${res.skipped} not found in MusicBrainz)` : res.message);
+                    go(`/playlists/${res.playlist_id}`);
+                } catch (err) {
+                    toast(err.message, "error");
+                    busy(e.currentTarget, false);
+                }
+            } }, icon("copy"), "Copy to my playlists"),
+            sub.owner_profile_url && !sub.parent_id && h("button", { type: "button", class: "btn btn-ghost", onclick: async () => {
+                try {
+                    const prof = await api("/api/subscriptions", { method: "POST", body: { url: sub.owner_profile_url } });
+                    go(`/friends/${prof.id}`);
+                } catch (err) {
+                    toast(err.message, "error");
+                }
+            } }, icon("user"), `${sub.owner_name || "Owner"}'s profile`)
+        );
+        clear(
+            main,
+            back,
+            h(
+                "section",
+                { class: "hero" },
+                coverBox,
+                h(
+                    "div",
+                    { class: "hero-body" },
+                    h("span", { class: "eyebrow" }, "Shared playlist"),
+                    h("h1", {}, sub.title),
+                    h("div", { class: "dot-list" }, sub.owner_name && h("span", {}, `by ${sub.owner_name}`), h("span", {}, `${sub.total} ${sub.total === 1 ? "song" : "songs"}`), sub.updated_at && h("span", {}, `updated ${timeAgo(sub.updated_at)}`)),
+                    h("div", { class: "dot-list" }, ownedLine),
+                    actions
+                )
+            ),
+            stale,
+            h("div", { class: "section" }, tracks.length ? songList(tracks, { numbered: true, rowOpts: () => ({ showMissing: true }) }) : empty("music", "This playlist is empty", ""))
+        );
+    }
+
+    function renderProfileSub(sub, back, stale, alive) {
+        const openPlaylist = async (p) => {
+            try {
+                const child = p.subscription_id ? { id: p.subscription_id } : await api(`/api/subscriptions/${sub.id}/open`, { method: "POST", body: { url: p.url } });
+                if (alive()) go(`/friends/${child.id}`);
+            } catch (err) {
+                toast(err.message, "error");
+            }
+        };
+        const tiles = sub.playlists.map((p) =>
+            h(
+                "button",
+                { type: "button", class: "tile", onclick: () => openPlaylist(p) },
+                mosaic([]),
+                h("span", { class: "tile-title" }, p.name),
+                h("span", { class: "tile-sub" }, [p.track_count != null && `${p.track_count} songs`, p.updated_at && `updated ${timeAgo(p.updated_at)}`].filter(Boolean).join(" · "))
+            )
+        );
+        const listens = sub.recent_listens;
+        const artists = sub.top_artists;
+        clear(
+            main,
+            back,
+            h(
+                "section",
+                { class: "hero" },
+                avatar(sub.title, "avatar-lg"),
+                h(
+                    "div",
+                    { class: "hero-body" },
+                    h("span", { class: "eyebrow" }, "Friend"),
+                    h("h1", {}, sub.title),
+                    sub.bio && h("p", {}, sub.bio),
+                    h("div", { class: "dot-list" }, h("span", {}, `${sub.playlists.length} shared ${sub.playlists.length === 1 ? "playlist" : "playlists"}`), sub.updated_at && h("span", {}, `updated ${timeAgo(sub.updated_at)}`))
+                )
+            ),
+            stale,
+            h("div", { class: "section" }, h("h2", { class: "section-title" }, "Playlists"), tiles.length ? h("div", { class: "grid" }, tiles) : h("p", { class: "muted" }, "No shared playlists yet.")),
+            listens &&
+                h(
+                    "div",
+                    { class: "section" },
+                    h("h2", { class: "section-title" }, "Recent listens"),
+                    listens.length ? h("ul", { class: "list" }, listens.map((l, i) => songRow(l.song, { time: timeAgo(l.listened_at), queue: listens.map((x) => x.song), queueIndex: i, showMissing: true }))) : h("p", { class: "muted" }, "Nothing yet.")
+                ),
+            artists &&
+                artists.length > 0 &&
+                h(
+                    "div",
+                    { class: "section" },
+                    h("h2", { class: "section-title" }, "Top artists", h("span", { class: "muted small" }, "last 30 days")),
+                    h("div", { class: "card" }, topBars(artists, (a) => a.name, (a) => (a.mbid ? `/artist/${a.mbid}` : "/friends")))
+                )
+        );
+    }
+
     // --- someone else's profile ------------------------------------------------------------------------
 
     async function pageUser({ args: [id], alive }) {
@@ -2205,7 +2515,7 @@
 
         const listens = h("div", {});
         const playlists = h("div", {});
-        const followersCount = () => main.querySelector(".counts b");
+        const followersCount = () => main.querySelector(".followers-count");
 
         async function loadListens() {
             if (!user.listens_visible) {
@@ -2227,7 +2537,7 @@
             }
         }
 
-        const follow = followButton(
+        const follow = social() && followButton(
             user,
             (u) => {
                 user.followers += u.is_following ? 1 : -1;
@@ -2240,11 +2550,11 @@
 
         clear(
             main,
-            profileHero(user, { extra: h("div", { class: "actions" }, follow) }),
-            h("div", { class: "section" }, h("h2", { class: "section-title" }, "Recent listens"), listens),
+            profileHero(user, { extra: follow && h("div", { class: "actions" }, follow) }),
+            social() && h("div", { class: "section" }, h("h2", { class: "section-title" }, "Recent listens"), listens),
             h("div", { class: "section" }, h("h2", { class: "section-title" }, "Public playlists"), playlists)
         );
-        loadListens();
+        if (social()) loadListens();
 
         try {
             const items = (await api(`/api/users/${id}/playlists`)).items;
@@ -2263,13 +2573,14 @@
             window.close();
             return;
         }
-        buildNav();
         buildPlayer();
-        try {
-            state.me = (await api("/auth/session")).user;
-        } catch {
-            state.me = null;
-        }
+        const [session, instance] = await Promise.all([
+            api("/auth/session").catch(() => ({ user: null })),
+            api("/api/instance").catch(() => null),
+        ]);
+        state.me = session.user;
+        state.instance = instance || { features: { social: false, sharing: true, streaming: true } };
+        buildNav();
         render();
     }
 
