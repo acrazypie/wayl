@@ -15,6 +15,9 @@ Flask + SQLite, email/password accounts, vanilla JS frontend (no build step). So
 the free, open [MusicBrainz](https://musicbrainz.org) and [ListenBrainz](https://listenbrainz.org)
 databases, so there's no song library to maintain and no API key to get.
 
+The UI is dark by default with a light theme (toggle in the top bar, remembered per browser). Fonts
+(Syne and DM Mono, SIL OFL) are self-hosted in `app/static/fonts/`, so no request leaves your server.
+
 ## Self-hosting with Docker
 
 ```bash

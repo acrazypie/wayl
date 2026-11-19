@@ -286,11 +286,19 @@
         );
     }
 
-    function pageHead(title, subtitle, ...actions) {
+    /** Title with one word in the accent colour: the last one, or an accent full stop for one-word titles. */
+    function accentTitle(title) {
+        const cut = title.lastIndexOf(" ");
+        if (cut < 0) return [title, h("span", { class: "accent" }, ".")];
+        return [title.slice(0, cut + 1), h("span", { class: "accent" }, title.slice(cut + 1))];
+    }
+
+    /** Screen opening: tag → big title → lede → actions. */
+    function pageHead(tag, title, subtitle, ...actions) {
         return h(
             "header",
             { class: "page-head" },
-            h("div", {}, h("h1", {}, title), subtitle && h("p", {}, subtitle)),
+            h("div", {}, h("span", { class: "eyebrow" }, tag), h("h1", {}, accentTitle(title)), subtitle && h("p", {}, subtitle)),
             actions.length ? h("div", { class: "actions" }, actions) : null
         );
     }
@@ -790,13 +798,13 @@
 
     function buildNav() {
         const link = ([href, label, ic]) => h("a", { href }, icon(ic), h("span", {}, label));
-        clear($("#nav"), navItems().map(link), h("hr", { class: "nav-sep" }), link(["/settings", "Settings", "sliders"]));
+        clear($("#nav"), navItems().map(link));
         clear($("#tabbar"), navItems().map(link));
-        clear($("#mobile-actions"), h("a", { href: "/settings", class: "icon-btn", "aria-label": "Settings" }, icon("sliders")));
+        clear($("#nav-settings"), h("a", { href: "/settings", class: "icon-btn", "aria-label": "Settings", title: "Settings" }, icon("sliders")));
     }
 
     function markNav(path) {
-        for (const a of document.querySelectorAll("#nav a, #tabbar a, #mobile-actions a")) {
+        for (const a of document.querySelectorAll("#nav a, #tabbar a, #nav-settings a")) {
             const href = a.getAttribute("href");
             const active = path === href || path.startsWith(href + "/");
             if (active) a.setAttribute("aria-current", "page");
@@ -855,7 +863,8 @@
                 h(
                     "section",
                     { class: "auth-art", "aria-hidden": "true" },
-                    h("h2", {}, "What are you listening to?"),
+                    h("span", { class: "eyebrow" }, "Your music log"),
+                    h("h2", {}, h("span", {}, "What are you"), h("span", { class: "accent" }, "listening"), h("span", {}, "to?")),
                     h(
                         "p",
                         {},
@@ -870,8 +879,7 @@
                     h(
                         "div",
                         { class: "auth-card" },
-                        h("img", { class: "logo", src: "/static/logo-wordmark.svg", alt: "WAYL", width: "128", height: "40" }),
-                        h("h1", {}, title),
+                        h("h1", {}, accentTitle(title)),
                         h("p", { class: "lede" }, lede),
                         form,
                         foot && h("p", { class: "auth-foot" }, foot)
@@ -1068,7 +1076,7 @@
         const filters = state.me.has_servers ? h("div", { class: "hint-row" }, filterBtn) : null;
         clear(
             main,
-            pageHead("Search", state.me.has_servers ? "Find any song, or just the ones on your server." : "Find any song in the open MusicBrainz database."),
+            pageHead("Discover", "Search", state.me.has_servers ? "Find any song, or just the ones on your server." : "Find any song in the open MusicBrainz database."),
             form,
             filters,
             results
@@ -1389,7 +1397,7 @@
         ];
         clear(
             main,
-            pageHead("Following", "What the people you follow are listening to."),
+            pageHead("Feed", "Following", "What the people you follow are listening to."),
             segmented(tabs, tab, (key) => {
                 setQuery({ tab: key === "activity" ? "" : key });
                 show(key);
@@ -1475,7 +1483,7 @@
         const name = h("input", { class: "input", name: "name", placeholder: "Name your playlist", maxlength: "120", required: true, "aria-label": "New playlist name" });
         const createForm = h("form", { class: "inline-form card", hidden: true, style: "margin-bottom:24px" }, name, h("button", { class: "btn btn-primary", type: "submit" }, "Create"));
         const newBtn = h("button", { type: "button", class: "btn btn-primary", onclick: () => { createForm.hidden = false; name.focus(); } }, icon("plus"), "New playlist");
-        clear(main, pageHead("Playlists", "Your collections of songs.", newBtn), createForm, grid);
+        clear(main, pageHead("Collections", "Playlists", "Your collections of songs.", newBtn), createForm, grid);
 
         createForm.addEventListener("submit", async (e) => {
             e.preventDefault();
@@ -1625,7 +1633,7 @@
         const tab = params.get("tab") === "recent" ? "recent" : "saved";
         clear(
             main,
-            pageHead("My songs", "Songs you've saved and what you've played lately."),
+            pageHead("Your log", "My songs", "Songs you've saved and what you've played lately."),
             segmented([["saved", "Saved"], ["recent", "Recently played"]], tab, (key) => {
                 setQuery({ tab: key === "saved" ? "" : key });
                 show(key);
@@ -1889,7 +1897,7 @@
 
         clear(
             main,
-            pageHead("Settings", "Connect your music server, share with friends and manage your account."),
+            pageHead("Account", "Settings", "Connect your music server, share with friends and manage your account."),
             h(
                 "div",
                 { class: "section", id: "servers" },
@@ -2327,7 +2335,7 @@
         const addBtn = h("button", { type: "submit", class: "btn btn-primary" }, icon("plus"), "Add");
         const form = h("form", { class: "inline-form card" }, input, addBtn);
         const list = h("div", { class: "section" }, skeleton(3));
-        clear(main, pageHead("Friends", FRIENDS_IDEA), form, list);
+        clear(main, pageHead("Sharing", "Friends", FRIENDS_IDEA), form, list);
 
         form.addEventListener("submit", async (e) => {
             e.preventDefault();
@@ -2565,6 +2573,47 @@
         }
     }
 
+    // --- theme ------------------------------------------------------------------------------------------
+    // The inline script in <head> sets data-theme before the first paint; this only handles the toggle.
+
+    function applyTheme(theme) {
+        document.documentElement.dataset.theme = theme;
+        $('meta[name="theme-color"]').setAttribute("content", theme === "light" ? "#fafafa" : "#0a0a0a");
+        $("#theme-toggle").setAttribute("aria-label", theme === "light" ? "Switch to dark theme" : "Switch to light theme");
+    }
+
+    function setupTheme() {
+        const button = $("#theme-toggle");
+        applyTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
+        button.addEventListener("click", (e) => {
+            const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+            prefsRaw("theme", next);
+            const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+            if (!document.startViewTransition || still) return applyTheme(next);
+            // A circle grows from the click point (or the button's centre for keyboard use).
+            const box = button.getBoundingClientRect();
+            const pointer = e.detail > 0;
+            const x = pointer ? e.clientX : box.left + box.width / 2;
+            const y = pointer ? e.clientY : box.top + box.height / 2;
+            const r = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+            document.startViewTransition(() => applyTheme(next)).ready.then(() => {
+                document.documentElement.animate(
+                    { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
+                    { duration: 600, easing: "cubic-bezier(0.22, 1, 0.36, 1)", pseudoElement: "::view-transition-new(root)" }
+                );
+            });
+        });
+    }
+
+    /** The theme uses the plain "theme" key (as in the design system), read by the <head> script. */
+    function prefsRaw(key, value) {
+        try {
+            localStorage.setItem(key, value);
+        } catch {
+            /* private mode etc. */
+        }
+    }
+
     // --- boot -------------------------------------------------------------------------------------------
 
     async function boot() {
@@ -2574,6 +2623,7 @@
             return;
         }
         buildPlayer();
+        setupTheme();
         const [session, instance] = await Promise.all([
             api("/auth/session").catch(() => ({ user: null })),
             api("/api/instance").catch(() => null),

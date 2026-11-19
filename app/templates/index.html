@@ -1,14 +1,27 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        <meta name="color-scheme" content="light dark" />
-        <meta name="theme-color" content="#f7f7fb" media="(prefers-color-scheme: light)" />
-        <meta name="theme-color" content="#0e0e12" media="(prefers-color-scheme: dark)" />
+        <meta name="theme-color" content="#0a0a0a" />
         <meta name="description" content="WAYL: log what you listen to, build playlists and see what your friends are playing." />
         <title>WAYL · What Are You Listening?</title>
+        <script>
+            /* Apply the saved (or system) theme before the first paint, to avoid a flash. */
+            (function () {
+                var theme;
+                try {
+                    theme = localStorage.getItem("theme");
+                } catch (e) {}
+                if (theme !== "light" && theme !== "dark")
+                    theme = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+                document.documentElement.setAttribute("data-theme", theme);
+                document.querySelector('meta[name="theme-color"]').setAttribute("content", theme === "light" ? "#fafafa" : "#0a0a0a");
+            })();
+        </script>
         <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml" />
+        <link rel="preload" href="{{ url_for('static', filename='fonts/dm-mono-latin-400-normal.woff2') }}" as="font" type="font/woff2" crossorigin />
+        <link rel="preload" href="{{ url_for('static', filename='fonts/syne-latin-700-normal.woff2') }}" as="font" type="font/woff2" crossorigin />
         <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
         <script src="{{ url_for('static', filename='app.js') }}" defer></script>
     </head>
@@ -16,32 +29,36 @@
         <a class="skip-link" href="#main">Skip to content</a>
 
         <div id="app" class="app" data-state="loading">
-            <aside class="sidebar" aria-label="Main navigation">
-                <a href="/search" class="sidebar-brand" aria-label="WAYL home">
-                    <img src="{{ url_for('static', filename='logo-wordmark.svg') }}" alt="WAYL" width="128" height="40" />
+            <header class="topnav">
+                <a href="/search" class="brand" aria-label="WAYL home">
+                    <span class="brand-mark" aria-hidden="true"></span>
+                    <span class="brand-name" aria-hidden="true">WAYL</span>
                 </a>
-                <nav id="nav" class="nav"></nav>
-                <p class="sidebar-credits">
+                <nav id="nav" class="nav" aria-label="Main navigation"></nav>
+                <div class="nav-end">
+                    <span id="nav-settings"></span>
+                    <button id="theme-toggle" class="icon-btn theme-toggle" type="button" aria-label="Switch to light theme">
+                        <svg class="icon icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></svg>
+                        <svg class="icon icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
+                    </button>
+                </div>
+            </header>
+
+            <main id="main" class="main" tabindex="-1">
+                <div class="boot" aria-live="polite">
+                    <span class="brand-mark" aria-hidden="true"></span>
+                </div>
+            </main>
+
+            <footer class="site-foot">
+                <p>
                     Music data from
                     <a href="https://musicbrainz.org" target="_blank" rel="noopener">MusicBrainz</a> &amp;
                     <a href="https://listenbrainz.org" target="_blank" rel="noopener">ListenBrainz</a>.
                     Covers from the
                     <a href="https://coverartarchive.org" target="_blank" rel="noopener">Cover Art Archive</a>.
                 </p>
-            </aside>
-
-            <header class="mobile-top">
-                <a href="/search" aria-label="WAYL home">
-                    <img src="{{ url_for('static', filename='logo-wordmark.svg') }}" alt="WAYL" width="96" height="30" />
-                </a>
-                <div id="mobile-actions"></div>
-            </header>
-
-            <main id="main" class="main" tabindex="-1">
-                <div class="boot" aria-live="polite">
-                    <img src="{{ url_for('static', filename='logo.svg') }}" alt="" width="48" height="48" />
-                </div>
-            </main>
+            </footer>
 
             <nav id="tabbar" class="tabbar" aria-label="Main navigation"></nav>
         </div>
